@@ -1,0 +1,235 @@
+# Every committed test sample in tests/data, where it came from, and why.
+#
+# scripts/extract_samples.py reads this file, pulls the matching events out of
+# the cached raw datasets (see sources.yaml), and writes the JSONL files below.
+#
+# Fields:
+#   output          file path relative to tests/data
+#   label           malicious: the rule(s) in this folder MUST fire on every event
+#                   benign:    NO rule may fire on any of these events
+#   origin          public-dataset | self-generated (Phase 2 lab) | synthetic (hand-written)
+#   source          id from sources.yaml (license and URL live there)
+#   technique       ATT&CK technique the events demonstrate (malicious only)
+#   why             what the events show, in one line
+#   where           event filter, written with Sigma-style field modifiers
+#   expected_count  how many events the filter must match (guards against upstream changes)
+#
+# Malicious folder names match the Sigma rule file names in rules/sigma/ (step 3).
+
+samples:
+  # ------------------------------------------------------------------ T1003.001
+  - output: malicious/proc_access_win_lsass_credential_dump_access/otrf_mimikatz_logonpasswords.jsonl
+    label: malicious
+    origin: public-dataset
+    source: otrf_mimikatz_logonpasswords
+    technique: T1003.001
+    why: Empire runs Mimikatz sekurlsa::logonpasswords in-memory; PowerShell opens LSASS with 0x1010.
+    where:
+      EventID: 10
+      TargetImage|endswith: '\lsass.exe'
+      SourceImage|endswith: '\powershell.exe'
+    expected_count: 1
+
+  - output: malicious/proc_access_win_lsass_credential_dump_access/otrf_lsass_dump_comsvcs.jsonl
+    label: malicious
+    origin: public-dataset
+    source: otrf_lsass_dump_comsvcs
+    technique: T1003.001
+    why: rundll32 (comsvcs.dll MiniDump) opens LSASS with full access to write a memory dump.
+    where:
+      EventID: 10
+      TargetImage|endswith: '\lsass.exe'
+      SourceImage|endswith: '\rundll32.exe'
+    expected_count: 2
+
+  - output: malicious/proc_creation_win_rundll32_comsvcs_minidump/otrf_lsass_dump_comsvcs.jsonl
+    label: malicious
+    origin: public-dataset
+    source: otrf_lsass_dump_comsvcs
+    technique: T1003.001
+    why: rundll32.exe comsvcs.dll MiniDump <lsass pid> <file> full.
+    where:
+      EventID: 1
+      CommandLine|contains: 'MiniDump'
+    expected_count: 1
+
+  # ------------------------------------------------------------------ T1558.003
+  - output: malicious/win_security_kerberoasting_rc4_service_ticket/splunk_rubeus_kerberoast.jsonl
+    label: malicious
+    origin: public-dataset
+    source: splunk_rubeus_kerberoast
+    technique: T1558.003
+    why: Rubeus kerberoast requests RC4 (0x17) service tickets for 30 service accounts.
+    where:
+      EventID: 4769
+      TicketEncryptionType: '0x17'
+    expected_count: 30
+
+  # ------------------------------------------------------------------ T1059.001
+  - output: malicious/proc_creation_win_powershell_encoded_hidden/otrf_empire_launcher_vbs.jsonl
+    label: malicious
+    origin: public-dataset
+    source: otrf_empire_launcher_vbs
+    technique: T1059.001
+    why: Empire VBS launcher starts powershell -noP -sta -w 1 -enc <base64>.
+    where:
+      EventID: 1
+      Image|endswith: '\powershell.exe'
+    expected_count: 1
+
+  - output: malicious/proc_creation_win_powershell_encoded_hidden/otrf_regsvr32_sct.jsonl
+    label: malicious
+    origin: public-dataset
+    source: otrf_regsvr32_sct
+    technique: T1059.001
+    why: Stager launched by regsvr32 runs the same hidden, encoded PowerShell.
+    where:
+      EventID: 1
+      Image|endswith: '\powershell.exe'
+    expected_count: 1
+
+  - output: malicious/proc_creation_win_powershell_encoded_hidden/otrf_empire_psexec.jsonl
+    label: malicious
+    origin: public-dataset
+    source: otrf_empire_psexec
+    technique: T1059.001
+    why: PsExec-style service runs hidden, encoded PowerShell as SYSTEM.
+    where:
+      EventID: 1
+      Image|endswith: '\powershell.exe'
+    expected_count: 1
+
+  # ------------------------------------------------------------------ T1053.005
+  - output: malicious/proc_creation_win_schtasks_create_suspicious_action/otrf_empire_schtasks.jsonl
+    label: malicious
+    origin: public-dataset
+    source: otrf_empire_schtasks
+    technique: T1053.005
+    why: schtasks /Create with a task action that runs hidden PowerShell.
+    where:
+      EventID: 1
+      Image|endswith: '\schtasks.exe'
+    expected_count: 1
+
+  - output: malicious/win_security_scheduled_task_created_suspicious_action/otrf_empire_schtasks.jsonl
+    label: malicious
+    origin: public-dataset
+    source: otrf_empire_schtasks
+    technique: T1053.005
+    why: Security 4698 records the same task, including its full XML action.
+    where:
+      EventID: 4698
+    expected_count: 1
+
+  # ------------------------------------------------------------------ T1547.001
+  - output: malicious/registry_set_win_run_key_suspicious_value/otrf_empire_run_keys.jsonl
+    label: malicious
+    origin: public-dataset
+    source: otrf_empire_run_keys
+    technique: T1547.001
+    why: HKLM Run key "Updater" launches hidden, encoded PowerShell at logon.
+    where:
+      EventID: 13
+      TargetObject|contains: '\CurrentVersion\Run\'
+    expected_count: 1
+
+  # ------------------------------------------------------------------ T1218.005
+  - output: malicious/proc_creation_win_mshta_inline_script/otrf_mshta_vbscript.jsonl
+    label: malicious
+    origin: public-dataset
+    source: otrf_mshta_vbscript
+    technique: T1218.005
+    why: mshta vbscript:Execute(...) runs inline script that spawns PowerShell.
+    where:
+      EventID: 1
+      Image|endswith: '\mshta.exe'
+    expected_count: 1
+
+  # ------------------------------------------------------------------ T1218.010
+  - output: malicious/proc_creation_win_regsvr32_scrobj_remote_sct/otrf_regsvr32_sct.jsonl
+    label: malicious
+    origin: public-dataset
+    source: otrf_regsvr32_sct
+    technique: T1218.010
+    why: regsvr32 /s /n /u /i:http://.../launcher.sct scrobj.dll ("Squiblydoo").
+    where:
+      EventID: 1
+      Image|endswith: '\regsvr32.exe'
+    expected_count: 1
+
+  # ------------------------------------------------------------------ T1021.002 / T1569.002
+  - output: malicious/win_system_service_install_suspicious_image_path/otrf_empire_psexec.jsonl
+    label: malicious
+    origin: public-dataset
+    source: otrf_empire_psexec
+    technique: T1569.002
+    why: Remote service "Updater" created over SMB/svcctl with ImagePath %COMSPEC% /C ... powershell -enc.
+    where:
+      EventID: 7045
+    expected_count: 1
+
+  # ================================================================== BENIGN
+  # Normal background activity from the same lab hosts. Several are deliberate
+  # near-misses that a careless rule would flag.
+
+  - output: benign/public_background.jsonl
+    label: benign
+    origin: public-dataset
+    source: otrf_mimikatz_logonpasswords
+    why: svchost opening LSASS with low access rights (0x1000/0x2000), routine system behavior.
+    where:
+      EventID: 10
+      TargetImage|endswith: '\lsass.exe'
+      SourceImage|endswith: '\svchost.exe'
+    expected_count: 3
+
+  - output: benign/public_background.jsonl
+    label: benign
+    origin: public-dataset
+    source: otrf_empire_psexec
+    why: More svchost to LSASS handles (0x1000/0x3000) on a second host.
+    where:
+      EventID: 10
+      TargetImage|endswith: '\lsass.exe'
+      SourceImage|endswith: '\svchost.exe'
+    expected_count: 7
+
+  - output: benign/public_background.jsonl
+    label: benign
+    origin: public-dataset
+    source: otrf_empire_launcher_vbs
+    why: lsass writes ...\W32Time\SecureTimeLimits\RunTime\..., a near-miss for naive "\Run" registry rules.
+    where:
+      EventID: 13
+      TargetObject|contains: '\RunTime\'
+    expected_count: 4
+
+  - output: benign/public_background.jsonl
+    label: benign
+    origin: public-dataset
+    source: otrf_empire_psexec
+    why: Office ClickToRun scheduled update and its telemetry/language registry writes (normal maintenance).
+    where:
+      EventID: [1, 13]
+      Image|endswith: ['\OfficeClickToRun.exe', '\OfficeC2RClient.exe']
+    expected_count: 7
+
+  - output: benign/public_background.jsonl
+    label: benign
+    origin: public-dataset
+    source: otrf_regsvr32_sct
+    why: Routine Windows process launches (service host, WMI provider, background tasks).
+    where:
+      EventID: 1
+      Image|endswith: ['\svchost.exe', '\WmiPrvSE.exe', '\backgroundTaskHost.exe', '\RuntimeBroker.exe']
+    expected_count: 4
+
+  - output: benign/public_background.jsonl
+    label: benign
+    origin: public-dataset
+    source: splunk_rubeus_kerberoast
+    why: Splunk forwarder helper processes, including splunk-powershell.exe (near-miss for name-only PowerShell rules).
+    where:
+      EventID: 4688
+      NewProcessName|contains: '\SplunkUniversalForwarder\'
+    expected_count: 70
