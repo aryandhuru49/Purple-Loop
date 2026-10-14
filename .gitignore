@@ -45,6 +45,11 @@ credentials.json
 .env
 .env.*
 
+# --- Claude Code (local AI assistant config and notes) ---
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+
 # --- OS / editor ---
 .DS_Store
 Thumbs.db
