@@ -1,5 +1,50 @@
 [project]
 name = "purple-loop"
 version = "0.1.0"
+description = "Purple Loop turns simulated attacks into tested, portable detections."
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
-dependencies = []
+# Why pySigma is pinned below 2.0:
+# sigma-cli 3.x and the Splunk and SecOps backends still require pySigma 1.x.
+# The SQLite backend moved to pySigma 2.x in its 2.0 release, so we stay on
+# its 1.2.x line. Revisit when the Splunk and SecOps backends support pySigma 2.
+dependencies = [
+    "duckdb>=1.5.6",
+    "pysigma>=1.3,<2",
+    "pysigma-backend-secops>=1.0,<2",
+    "pysigma-backend-splunk>=2.1,<3",
+    "pysigma-backend-sqlite>=1.2,<2",
+    "pysigma-pipeline-sysmon>=2.0.0",
+    "pysigma-pipeline-windows>=2.0.1",
+    "python-evtx>=0.8.1",
+    "pyyaml>=6.0.3",
+    "requests>=2.34.2",
+    "sigma-cli>=3.1,<4",
+    "tabulate>=0.10.0",
+    "yara-python>=4.5.4",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.7.0",
+    "pytest>=9.1.1",
+    "ruff>=0.17.0",
+    "yamllint>=1.38.0",
+]
+
+# This repo is a collection of scripts and rules, not an installable package.
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# E/F: pycodestyle and pyflakes basics, I: import sorting, B: common bugs, UP: modern syntax
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
