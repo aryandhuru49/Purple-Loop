@@ -1,0 +1,48 @@
+# Pre-commit hooks run on every `git commit`. CI runs the same hooks,
+# so a rule that passes locally passes in GitHub Actions too.
+# Install once with: uv run pre-commit install
+repos:
+  # Generic file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=1024]   # keep log samples small and curated
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # Python lint and format
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.0
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  # YAML style (Sigma rules, workflows, manifest)
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+        args: [-c, .yamllint.yaml]
+
+  # Secret scanning: blocks commits that contain keys or tokens.
+  # Matters most once the Terraform lab (Phase 2) exists.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+
+  # Sigma rule validation with sigma-cli (uses the project's uv environment)
+  - repo: local
+    hooks:
+      - id: sigma-check
+        name: sigma check
+        entry: uv run sigma check
+        language: system
+        files: ^rules/sigma/.*\.ya?ml$

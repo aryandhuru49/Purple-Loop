@@ -1,0 +1,17 @@
+extends: default
+
+rules:
+  # Sigma descriptions and detection strings are often long; warn instead of failing.
+  line-length:
+    max: 140
+    level: warning
+  # GitHub Actions uses `on:` which yamllint would flag as a truthy value.
+  truthy:
+    allowed-values: ["true", "false", "on"]
+  document-start: disable
+  comments:
+    min-spaces-from-content: 1
+
+ignore: |
+  .venv/
+  converted/
