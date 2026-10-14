@@ -8,7 +8,7 @@
 #   id       short name referenced by tests/data/manifest.yaml
 #   url      exact file downloaded
 #   format   otrf-json-zip  = zip containing JSON, one event per line (OTRF/Mordor style)
-#            winxml-lines   = one Windows XML <Event> per line (Splunk attack_data)
+#            wineventlog-text = Splunk classic multi-line "key=value" Windows event text
 #   license  SPDX license identifier of the upstream repository
 #   sha256   hash recorded on first download (trust on first use)
 
@@ -33,7 +33,7 @@ sources:
     # Splunk stores datasets in Git LFS; media.githubusercontent.com serves the real file.
     url: https://media.githubusercontent.com/media/splunk/attack_data/master/datasets/attack_techniques/T1558.003/rubeus/windows-security.log
     repo: https://github.com/splunk/attack_data
-    format: winxml-lines
+    format: wineventlog-text
     license: Apache-2.0
     technique: T1558.003
     sha256: b5d694ca38e0ad78f779cfd91421cb37bf2514cbbc6c25afa7ac84c1b24e9313
