@@ -1,0 +1,52 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# --- Raw dataset downloads ---
+# Only the curated, normalized JSONL in tests/data is committed.
+# Raw archives (zip, evtx) are re-downloadable from the manifest URLs.
+.cache/
+downloads/
+*.evtx
+*.zip
+
+# --- Generated output that CI rebuilds ---
+reports/
+
+# --- Terraform (Phase 2) ---
+# State files can contain secrets and resource IDs; never commit them.
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfplan
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+# Real variable files hold your IP and project ID; only the example is committed.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# --- Credentials (defense in depth; gitleaks also scans commits) ---
+*.json.key
+*-sa-key.json
+credentials.json
+.env
+.env.*
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

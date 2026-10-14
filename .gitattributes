@@ -1,0 +1,4 @@
+# Normalize line endings so Windows and Linux CI produce identical files.
+* text=auto eol=lf
+*.evtx binary
+*.bin binary
