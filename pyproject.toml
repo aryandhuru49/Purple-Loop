@@ -48,3 +48,5 @@ select = ["E", "F", "I", "B", "UP"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+# The SecOps backend uses a deprecated importlib.resources API; not our code.
+filterwarnings = ["ignore::DeprecationWarning:importlib.resources.*", "ignore::DeprecationWarning:sigma.*"]
