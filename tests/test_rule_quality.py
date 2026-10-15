@@ -34,6 +34,9 @@ def test_rule_is_documented(path):
         assert rule.get(field), f"missing {field}"
     assert rule["level"] in VALID_LEVELS
     assert rule.get("falsepositives"), "document at least one false positive scenario"
+    # An unquoted "text: more text" item silently becomes a YAML mapping, which breaks
+    # backends that copy false positives into their output (this happened once).
+    assert all(isinstance(fp, str) for fp in rule["falsepositives"]), "quote false positives"
     assert len(rule["description"].split()) >= 25, "description too short to explain the detection"
 
 

@@ -33,5 +33,5 @@ detection:
       - 'ftp://'
   condition: all of selection_*
 falsepositives:
-  - Rare. Some legacy installers pass /i: with an install argument; those reference a local DLL, not scrobj.dll or a URL.
+  - 'Rare. Some legacy installers pass /i: with an install argument; those reference a local DLL, not scrobj.dll or a URL.'
 level: high
