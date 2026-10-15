@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored:
+# never commit your real project, billing account or email.
+
+project_id         = "your-lab-project-id"
+billing_account_id = "000000-000000-000000"
+budget_alert_email = "you@example.com"
+
+# Optional overrides (defaults shown in variables.tf)
+# region         = "us-central1"
+# zone           = "us-central1-a"
+# time_zone      = "America/New_York"
+# shutdown_cron  = "0 22 * * *"
+# monthly_budget = 50
