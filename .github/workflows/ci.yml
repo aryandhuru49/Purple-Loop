@@ -2,9 +2,13 @@
 # Runs on every push and pull request. Any failing step fails the build,
 # so a broken rule or a failing detection test cannot be merged silently.
 #
-# Stages (more are added as the pipeline grows):
-#   1. lint  - the same pre-commit hooks developers run locally
-#   2. test  - Sigma detection table, pytest, and a check that converted/ is current
+# Jobs:
+#   lint     - the same pre-commit hooks developers run locally (ruff, yamllint,
+#              gitleaks secret scan, sigma check)
+#   detect   - Sigma detection tests (pass/fail table), all pytest suites, rule
+#              conversion, Logica hunts, ATT&CK coverage; uploads the outputs
+#   data     - re-downloads the public datasets (hash-verified) and proves the
+#              committed test samples rebuild byte-for-byte
 name: CI
 
 on:
@@ -46,14 +50,14 @@ jobs:
       - name: Run pre-commit on all files
         run: uv run pre-commit run --all-files --show-diff-on-failure
 
-  test:
-    name: Test (pytest)
-    runs-on: ubuntu-24.04  # pinned: ubuntu-latest moves to Ubuntu 26 on 2026-10-19
+  detect:
+    name: Detection tests, conversion, hunts, coverage
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v10.3.0  # setup-uv publishes full version tags only
+        uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: true
 
@@ -65,7 +69,7 @@ jobs:
       - name: Sigma detection tests
         run: uv run python scripts/run_sigma_tests.py
 
-      - name: Run tests
+      - name: Unit, data, rule-quality and YARA-L lint tests
         run: uv run pytest -v
 
       # converted/ is generated from rules/sigma. Fail if it was hand-edited or is stale,
@@ -78,3 +82,41 @@ jobs:
       # Compiles every Logica hunt, runs it on DuckDB, and fails if a committed .sql is stale.
       - name: Run Logica hunts
         run: uv run python scripts/run_hunts.py --check
+
+      - name: Check ATT&CK coverage layer is current
+        run: |
+          uv run python scripts/generate_coverage.py --check
+          cat coverage/COVERAGE.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Uploaded even when an earlier step failed, so a failing run can be inspected.
+      - name: Upload converted rules, coverage layer and test reports
+        if: always()
+        uses: actions/upload-artifact@v7.0.2  # publishes full version tags only
+        with:
+          name: purple-loop-outputs
+          path: |
+            converted/
+            coverage/
+            reports/
+          if-no-files-found: error
+
+  data:
+    name: Rebuild test samples from public datasets
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # ~3.6 MB from GitHub-hosted sources; each file is checked against its pinned SHA-256.
+      - name: Download datasets
+        run: uv run python scripts/fetch_datasets.py
+
+      - name: Verify committed samples match a fresh extraction
+        run: uv run python scripts/extract_samples.py --check
