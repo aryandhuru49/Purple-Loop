@@ -1,0 +1,6 @@
+[core]
+account = analyst@example.com
+project = purple-loop-lab
+
+[compute]
+region = us-central1

@@ -1,0 +1,12 @@
+# gitleaks configuration: the default ruleset plus one narrow, documented exception.
+#
+# rules/yara/*.yar are detection rules whose job is to match private-key headers and
+# footers, so their source necessarily contains those strings. They hold patterns, not
+# secrets. Everything else in the repository is scanned with the full default ruleset.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "YARA rule source: contains key-format patterns, not key material"
+paths = ['''^rules/yara/[^/]+\.yar$''']
