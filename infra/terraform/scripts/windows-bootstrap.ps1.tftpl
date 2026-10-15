@@ -1,0 +1,261 @@
+# Purple Loop lab: Windows bootstrap.
+#
+# Compute Engine runs this as SYSTEM at every boot (metadata key
+# windows-startup-script-ps1). Every step checks current state first, so the
+# script is safe to re-run; the DC promotion and domain join each reboot the
+# machine, and the next boot simply carries on from where it stopped.
+#
+# Rendered by Terraform templatefile(): the dollar-brace placeholders in the
+# settings block below are filled in at plan time. The rest of the script
+# avoids that syntax so Terraform leaves it alone.
+#
+# Log: C:\ProgramData\PurpleLoop\bootstrap.log
+
+$ErrorActionPreference = 'Stop'
+$ProgressPreference    = 'SilentlyContinue'  # Invoke-WebRequest is much faster without the progress bar
+
+$Role          = '${role}'               # 'dc' or 'member'
+$ProjectId     = '${project_id}'
+$DomainName    = '${domain_name}'
+$NetbiosName   = '${domain_netbios_name}'
+$DcIp          = '${dc_ip}'
+$AdminSecret   = '${admin_secret}'
+$DsrmSecret    = '${dsrm_secret}'
+$SysmonZipSha  = '${sysmon_zip_sha256}'
+$SysmonCfgUrl  = '${sysmon_config_url}'
+$SysmonCfgSha  = '${sysmon_config_sha256}'
+
+$WorkDir = 'C:\ProgramData\PurpleLoop'
+New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
+Start-Transcript -Path (Join-Path $WorkDir 'bootstrap.log') -Append | Out-Null
+
+# The metadata server by IP, so it still works after DNS points at the DC.
+$Metadata = 'http://169.254.169.254/computeMetadata/v1'
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+# Download a file and refuse it unless its SHA-256 matches the pinned value.
+function Get-VerifiedFile([string]$Url, [string]$Sha256, [string]$OutFile) {
+    Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing
+    $actual = (Get-FileHash -Path $OutFile -Algorithm SHA256).Hash.ToLower()
+    if ($actual -ne $Sha256.ToLower()) {
+        Remove-Item $OutFile -Force
+        throw "Hash mismatch for $Url (expected $Sha256, got $actual). Update the pinned hash in variables.tf after reviewing the new file."
+    }
+}
+
+# Read a secret from Secret Manager with the VM's service account token.
+# Plain REST calls, so no gcloud dependency on the image.
+function Get-LabSecret([string]$SecretId) {
+    $token = (Invoke-RestMethod -Headers @{ 'Metadata-Flavor' = 'Google' } `
+        -Uri "$Metadata/instance/service-accounts/default/token").access_token
+    $uri  = "https://secretmanager.googleapis.com/v1/projects/$ProjectId/secrets/$SecretId/versions/latest:access"
+    $resp = Invoke-RestMethod -Headers @{ Authorization = "Bearer $token" } -Uri $uri
+    return [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($resp.payload.data))
+}
+
+# Write a file only when its content changed; returns $true if it did.
+function Set-FileIfChanged([string]$Path, [string]$Content) {
+    if ((Test-Path $Path) -and ((Get-Content -Raw $Path) -eq $Content)) { return $false }
+    Set-Content -Path $Path -Value $Content -Encoding ascii -NoNewline
+    return $true
+}
+
+# ---------------------------------------------------------------------------
+# 1. Sysmon (process, network, registry, LSASS access telemetry)
+# ---------------------------------------------------------------------------
+
+function Install-Sysmon {
+    $cfgPath    = Join-Path $WorkDir 'sysmonconfig.xml'
+    $markerPath = Join-Path $WorkDir 'sysmon-config.sha256'
+    $installed  = [bool](Get-Service -Name Sysmon64 -ErrorAction SilentlyContinue)
+    $current    = if (Test-Path $markerPath) { (Get-Content -Raw $markerPath).Trim() } else { '' }
+
+    if ($installed -and $current -eq $SysmonCfgSha) {
+        Write-Output 'Sysmon: installed with the pinned config.'
+        return
+    }
+
+    Get-VerifiedFile $SysmonCfgUrl $SysmonCfgSha $cfgPath
+
+    if ($installed) {
+        # Pinned config changed in Terraform: reload it without reinstalling.
+        & "$env:SystemRoot\Sysmon64.exe" -c $cfgPath
+    } else {
+        $zip = Join-Path $WorkDir 'Sysmon.zip'
+        Get-VerifiedFile 'https://download.sysinternals.com/files/Sysmon.zip' $SysmonZipSha $zip
+        Expand-Archive -Path $zip -DestinationPath (Join-Path $WorkDir 'sysmon') -Force
+        & (Join-Path $WorkDir 'sysmon\Sysmon64.exe') -accepteula -i $cfgPath
+    }
+    if ($LASTEXITCODE -ne 0) { throw "Sysmon exited with code $LASTEXITCODE" }
+    Set-Content -Path $markerPath -Value $SysmonCfgSha
+    Write-Output 'Sysmon: installed/updated.'
+}
+
+# ---------------------------------------------------------------------------
+# 2. Windows audit policy: turn on the Security events the Sigma rules use
+# ---------------------------------------------------------------------------
+
+function Set-LabAuditPolicy {
+    # Use advanced (subcategory) audit policy and ignore the legacy category
+    # settings, which domain GPOs could otherwise apply on top.
+    Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' `
+        -Name SCENoApplyLegacyAuditPolicy -Value 1 -Type DWord
+
+    $subcategories = @(
+        'Process Creation',                   # 4688
+        'Security System Extension',          # 4697 service installed
+        'Other Object Access Events',         # 4698 scheduled task created
+        'Logon',                              # 4624 / 4625
+        'Special Logon',                      # 4672
+        'Credential Validation',              # 4776
+        'Kerberos Authentication Service',    # 4768 (DC)
+        'Kerberos Service Ticket Operations', # 4769 (DC), used by the Kerberoasting rule
+        'User Account Management',            # 4720 etc.
+        'Security Group Management'
+    )
+    foreach ($sub in $subcategories) {
+        auditpol /set /subcategory:"$sub" /success:enable /failure:enable | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "auditpol failed for '$sub'" }
+    }
+
+    # Include the full command line in 4688 events.
+    $auditKey = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System\Audit'
+    New-Item -Path $auditKey -Force | Out-Null
+    Set-ItemProperty -Path $auditKey -Name ProcessCreationIncludeCmdLine_Enabled -Value 1 -Type DWord
+
+    # PowerShell script block logging (event 4104).
+    $sbKey = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging'
+    New-Item -Path $sbKey -Force | Out-Null
+    Set-ItemProperty -Path $sbKey -Name EnableScriptBlockLogging -Value 1 -Type DWord
+
+    # A bigger Security log, so events survive until the Ops Agent ships them.
+    wevtutil sl Security /ms:268435456 | Out-Null
+    Write-Output 'Audit policy: applied.'
+}
+
+# ---------------------------------------------------------------------------
+# 3. Google Cloud Ops Agent: ships the event logs to Cloud Logging
+# ---------------------------------------------------------------------------
+
+# One receiver ("winevt" = the Cloud Logging log name) for every channel.
+# render_as_xml keeps each event's original XML in jsonPayload.raw_xml, so the
+# export script can recover the exact native field names Sigma rules use.
+# Redefining default_pipeline replaces the built-in System/Application receiver.
+$OpsAgentConfig = @'
+logging:
+  receivers:
+    winevt:
+      type: windows_event_log
+      receiver_version: 2
+      render_as_xml: true
+      channels:
+        - Security
+        - System
+        - Microsoft-Windows-Sysmon/Operational
+        - Microsoft-Windows-PowerShell/Operational
+        - Windows PowerShell
+  service:
+    pipelines:
+      default_pipeline:
+        receivers: [winevt]
+'@
+
+function Install-OpsAgent {
+    if (-not (Get-Service -Name google-cloud-ops-agent -ErrorAction SilentlyContinue)) {
+        # Google's documented install method (docs.cloud.google.com/logging/docs/agent/ops-agent/installation).
+        $installer = Join-Path $WorkDir 'add-google-cloud-ops-agent-repo.ps1'
+        Invoke-WebRequest -Uri 'https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.ps1' `
+            -OutFile $installer -UseBasicParsing
+        & $installer -AlsoInstall
+        Write-Output 'Ops Agent: installed.'
+    }
+    $cfg = 'C:\Program Files\Google\Cloud Operations\Ops Agent\config\config.yaml'
+    if (Set-FileIfChanged $cfg $OpsAgentConfig) {
+        Restart-Service -Name google-cloud-ops-agent -Force
+        Write-Output 'Ops Agent: config updated, restarted.'
+    } else {
+        Write-Output 'Ops Agent: config current.'
+    }
+}
+
+# ---------------------------------------------------------------------------
+# 4a. Domain controller: create the forest
+# ---------------------------------------------------------------------------
+
+function Initialize-DomainController {
+    # DomainRole 4/5 = backup/primary domain controller.
+    if ((Get-CimInstance Win32_ComputerSystem).DomainRole -ge 4) {
+        # Forward non-domain DNS queries to Google's metadata DNS so domain
+        # members can still resolve internet and Google API names.
+        $forwarders = (Get-DnsServerForwarder).IPAddress.IPAddressToString
+        if ($forwarders -notcontains '169.254.169.254') {
+            Set-DnsServerForwarder -IPAddress '169.254.169.254'
+        }
+        Write-Output "DC: already a domain controller for $DomainName."
+        return
+    }
+
+    # The local Administrator becomes the domain Administrator, so it needs the
+    # lab password first (promotion fails on a blank one).
+    $adminPw = ConvertTo-SecureString (Get-LabSecret $AdminSecret) -AsPlainText -Force
+    Set-LocalUser -Name Administrator -Password $adminPw
+    Enable-LocalUser -Name Administrator
+
+    Install-WindowsFeature -Name AD-Domain-Services, DNS -IncludeManagementTools | Out-Null
+    Import-Module ADDSDeployment
+
+    $dsrmPw = ConvertTo-SecureString (Get-LabSecret $DsrmSecret) -AsPlainText -Force
+    Write-Output "DC: promoting to first domain controller of $DomainName (the VM will reboot)."
+    Install-ADDSForest -DomainName $DomainName -DomainNetbiosName $NetbiosName `
+        -SafeModeAdministratorPassword $dsrmPw -InstallDns -Force
+}
+
+# ---------------------------------------------------------------------------
+# 4b. Member server: join the domain
+# ---------------------------------------------------------------------------
+
+function Join-LabDomain {
+    if ((Get-CimInstance Win32_ComputerSystem).PartOfDomain) {
+        Write-Output "Member: already joined to $DomainName."
+        return
+    }
+
+    # Use the DC for DNS so the domain's SRV records resolve.
+    $nic = Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1
+    Set-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -ServerAddresses $DcIp
+
+    # The DC promotes and reboots in parallel; wait (up to ~45 min) until it
+    # answers for the domain's LDAP SRV record.
+    $srv = "_ldap._tcp.dc._msdcs.$DomainName"
+    foreach ($attempt in 1..90) {
+        if (Resolve-DnsName -Name $srv -Type SRV -Server $DcIp -ErrorAction SilentlyContinue) { break }
+        Write-Output "Member: waiting for the domain controller ($attempt/90)..."
+        Start-Sleep -Seconds 30
+    }
+
+    $adminPw = ConvertTo-SecureString (Get-LabSecret $AdminSecret) -AsPlainText -Force
+    $cred    = New-Object System.Management.Automation.PSCredential("$NetbiosName\Administrator", $adminPw)
+    Write-Output "Member: joining $DomainName (the VM will reboot)."
+    Add-Computer -DomainName $DomainName -Credential $cred -Restart -Force
+}
+
+# ---------------------------------------------------------------------------
+# Main. Logging is set up before the role step, so promotion and join are
+# themselves captured in the lab telemetry.
+# ---------------------------------------------------------------------------
+
+try {
+    Install-Sysmon
+    Set-LabAuditPolicy
+    Install-OpsAgent
+    if ($Role -eq 'dc') { Initialize-DomainController } else { Join-LabDomain }
+    Write-Output 'Bootstrap: done.'
+} catch {
+    Write-Output "Bootstrap FAILED: $_"
+    throw
+} finally {
+    Stop-Transcript | Out-Null
+}
