@@ -13,6 +13,9 @@
 #   why             what the events show, in one line
 #   where           event filter, written with Sigma-style field modifiers
 #   expected_count  how many events the filter must match (guards against upstream changes)
+#   exported        lab samples only: BigQuery time window and event count, written by
+#                   scripts/export_lab_logs.py (lab logs can't be re-downloaded, so the
+#                   committed JSONL is the record; CI's rebuild job skips them)
 #
 # Malicious folder names match the Sigma rule file names in rules/sigma/ (step 3).
 

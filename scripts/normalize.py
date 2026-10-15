@@ -6,6 +6,8 @@ Different log shippers produce the same Windows event in different shapes:
     casing ("Security" vs "security").
   * Splunk attack_data: Splunk's classic multi-line "key=value" WinEventLog
     text, where event fields are human-readable labels ("Ticket Encryption Type").
+  * The Purple Loop GCP lab: the Ops Agent stores each event's original XML,
+    exported from BigQuery by scripts/export_lab_logs.py.
 
 Detection rules should not care about any of that. Every event that leaves this
 module uses the native Windows/Sysmon field names that Sigma rules are written
@@ -14,6 +16,7 @@ against (EventID, Channel, Image, CommandLine, TicketEncryptionType, ...).
 
 import json
 import re
+import xml.etree.ElementTree as ET
 import zipfile
 from collections.abc import Iterator
 from datetime import datetime
@@ -147,6 +150,57 @@ def read_wineventlog_text(path: Path) -> Iterator[dict]:
         block.append(line)
     if block:
         yield _parse_splunk_block(block)
+
+
+# ---------------------------------------------------------------------------
+# Purple Loop GCP lab: Ops Agent windows_event_log receiver with render_as_xml
+# ---------------------------------------------------------------------------
+
+# Every Windows event is stored in BigQuery with its original XML in
+# jsonPayload.raw_xml. The XML already uses the native field names
+# (<Data Name="CommandLine">), so no label mapping is needed.
+EVENT_NS = "{http://schemas.microsoft.com/win/2004/08/events/event}"
+
+
+def parse_windows_event_xml(raw_xml: str) -> dict:
+    """Turn one rendered Windows event (<Event> XML) into a flat event dict."""
+    root = ET.fromstring(raw_xml)
+    system = root.find(f"{EVENT_NS}System")
+    if system is None:
+        raise ValueError("not a Windows event: no <System> element")
+
+    def text(tag: str) -> str | None:
+        element = system.find(f"{EVENT_NS}{tag}")
+        return element.text if element is not None else None
+
+    provider = system.find(f"{EVENT_NS}Provider")
+    created = system.find(f"{EVENT_NS}TimeCreated")
+    event: dict = {
+        "EventID": text("EventID"),
+        "Channel": text("Channel"),
+        "Hostname": text("Computer"),
+        "Provider_Name": provider.get("Name") if provider is not None else None,
+    }
+    if created is not None and created.get("SystemTime"):
+        # SystemTime is UTC with up to 7 fractional digits; keep milliseconds
+        # to match the timestamps of the public datasets.
+        stamp = created.get("SystemTime").rstrip("Z")
+        whole, _, fraction = stamp.partition(".")
+        event["@timestamp"] = f"{whole}.{(fraction + '000')[:3]}Z"
+
+    # Most events: <EventData><Data Name="Field">value</Data>...</EventData>
+    for data in root.iterfind(f"{EVENT_NS}EventData/{EVENT_NS}Data"):
+        if data.get("Name"):
+            event.setdefault(data.get("Name"), data.text)
+
+    # Some events (e.g. 1102 log cleared) use <UserData><SomeType><Field>value</Field>.
+    user_data = root.find(f"{EVENT_NS}UserData")
+    if user_data is not None:
+        for container in user_data:
+            for field in container:
+                event.setdefault(field.tag.split("}")[-1], field.text)
+
+    return clean_event(event)
 
 
 # ---------------------------------------------------------------------------
