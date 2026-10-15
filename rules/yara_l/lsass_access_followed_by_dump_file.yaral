@@ -1,0 +1,61 @@
+// Native YARA-L 2.0 rule. Reviewed, NOT executed: Google SecOps is a paid platform.
+// See docs/yara_l.md for the UDM field mappings this rule depends on.
+//
+// Why YARA-L instead of Sigma: Sigma rules look at one event at a time. This rule
+// joins TWO different event types (Sysmon 10 process access, then Sysmon 11 file
+// creation) on the same process GUID, in order, within two minutes. "The process that
+// just opened LSASS with read access then wrote a file" is far stronger evidence of a
+// credential dump than either event alone, and it does not depend on the file name.
+//
+// The public dataset used in Phase 1 contains exactly this sequence:
+// rundll32.exe (comsvcs.dll MiniDump) opens lsass.exe with 0x1fffff, then creates
+// C:\Users\wardog\AppData\Local\Temp\lsass-comsvcs.dmp.
+
+rule lsass_access_followed_by_dump_file {
+
+  meta:
+    author = "Aryan Dhuru"
+    description = "A process opened lsass.exe with memory-read access and then created a file within 2 minutes (LSASS memory dump written to disk)."
+    severity = "Critical"
+    mitre_attack_tactic = "Credential Access"
+    mitre_attack_technique = "OS Credential Dumping: LSASS Memory"
+    mitre_attack_id = "T1003.001"
+    mitre_attack_version = "v20"
+    data_source = "Sysmon event 10 (ProcessAccess) and event 11 (FileCreate)"
+    false_positives = "EDR, backup or crash-dump tooling that legitimately reads LSASS and writes output; exclude by signed path after review."
+
+  events:
+    // Event 1: a process opens LSASS with access that allows reading its memory.
+    // Mapping confirmed from Google's own community rules: Sysmon GrantedAccess -> target.resource.name.
+    $open.metadata.event_type = "PROCESS_OPEN"
+    re.regex($open.target.process.file.full_path, `\\lsass\.exe$`) nocase
+    re.regex($open.target.resource.name, `^0x(1010|1410|1418|1438|143a|1fffff|1f0fff|1f1fff|1f2fff|1f3fff)$`) nocase
+    not re.regex($open.principal.process.file.full_path, `^C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\.*\\MsMpEng\.exe$`) nocase
+
+    // Event 2: the SAME process (by Sysmon process GUID) creates a file afterwards.
+    $dump.metadata.event_type = "FILE_CREATION"
+
+    // Join keys: same host, same process instance.
+    $open.principal.hostname = $host
+    $dump.principal.hostname = $host
+    $open.principal.process.product_specific_process_id = $process_guid
+    $dump.principal.process.product_specific_process_id = $process_guid
+
+    // Order: the file must be written after (or in the same second as) the LSASS access.
+    $open.metadata.event_timestamp.seconds <= $dump.metadata.event_timestamp.seconds
+
+  match:
+    // Sliding window anchored on the LSASS access: look 2 minutes forward from each one.
+    $host, $process_guid over 2m after $open
+
+  outcome:
+    $risk_score = max(95)
+    $dumping_process = array_distinct($open.principal.process.file.full_path)
+    $dumping_command_line = array_distinct($open.principal.process.command_line)
+    $granted_access = array_distinct($open.target.resource.name)
+    $files_written = array_distinct($dump.target.file.full_path)
+    $user = array_distinct($open.principal.user.userid)
+
+  condition:
+    $open and $dump
+}

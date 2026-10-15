@@ -1,0 +1,55 @@
+// Native YARA-L 2.0 rule. Reviewed, NOT executed: Google SecOps is a paid platform.
+// See docs/yara_l.md for the UDM field assumptions this rule depends on.
+//
+// Why YARA-L instead of Sigma: the Sigma rule
+// (rules/sigma/credential_access/win_security_kerberoasting_rc4_service_ticket.yml)
+// alerts on each RC4 ticket. Kerberoasting's real signature is VOLUME: one account
+// requesting tickets for many different services in minutes. That needs grouping by
+// account, a time window, and a distinct count, which YARA-L expresses natively.
+
+rule kerberoasting_rc4_service_ticket_burst {
+
+  meta:
+    author = "Aryan Dhuru"
+    description = "One account requested RC4-encrypted Kerberos service tickets for 5 or more distinct user service accounts within 10 minutes (Kerberoasting)."
+    severity = "High"
+    mitre_attack_tactic = "Credential Access"
+    mitre_attack_technique = "Steal or Forge Kerberos Tickets: Kerberoasting"
+    mitre_attack_id = "T1558.003"
+    mitre_attack_version = "v20"
+    data_source = "Windows Security event 4769 (domain controllers)"
+    false_positives = "Vulnerability scanners or SPN inventory tools run by admins; legacy RC4-only applications. Tune the threshold per environment."
+    sigma_counterpart = "44b6b4f9-93f8-415a-831c-581f88504463"
+
+  events:
+    $tgs.metadata.vendor_name = "Microsoft"
+    $tgs.metadata.product_event_type = "4769"
+
+    // PARSER ASSUMPTION: the Windows parser keeps TicketEncryptionType and Status as
+    // additional fields. Verify with a UDM search before enabling.
+    $tgs.additional.fields["TicketEncryptionType"] = "0x17"
+    $tgs.additional.fields["Status"] = "0x0"
+
+    // Requesting account = event field TargetUserName; requested service = ServiceName.
+    // PARSER ASSUMPTION: mapped to principal.user.userid and target.user.userid.
+    $tgs.principal.user.userid = $requester
+
+    // Machine accounts and krbtgt have random keys and are not Kerberoasting targets.
+    not re.regex($tgs.target.user.userid, `\$$`)
+    not $tgs.target.user.userid = "krbtgt" nocase
+
+  match:
+    // Hop window: group every matching ticket by the requesting account.
+    $requester over 10m
+
+  outcome:
+    $distinct_services = count_distinct($tgs.target.user.userid)
+    $ticket_count = count($tgs.metadata.id)
+    $services = array_distinct($tgs.target.user.userid)
+    $source_ips = array_distinct($tgs.principal.ip)
+    $domain_controllers = array_distinct($tgs.target.hostname)
+    $risk_score = max(75)
+
+  condition:
+    $tgs and $distinct_services >= 5
+}

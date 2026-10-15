@@ -1,0 +1,51 @@
+// Native YARA-L 2.0 rule. Reviewed, NOT executed: Google SecOps is a paid platform.
+// See docs/yara_l.md for the UDM field mappings this rule depends on.
+//
+// Why YARA-L instead of Sigma: a single service install is ordinary; the same NEW
+// service name appearing on many hosts in a short time is how PsExec-style tools
+// (Impacket, Cobalt Strike, ransomware affiliates) push a payload across a network.
+// Detecting it means counting DISTINCT HOSTS per service name across the whole
+// fleet, which a per-event Sigma rule cannot do.
+//
+// Complements rules/sigma/lateral_movement/win_system_service_install_suspicious_image_path.yml:
+// that rule inspects what one service runs; this one sees how far a service spreads,
+// so it still fires when the payload is a renamed .exe with an innocent-looking path.
+
+rule same_service_installed_on_many_hosts {
+
+  meta:
+    author = "Aryan Dhuru"
+    description = "The same service name was installed on 3 or more distinct hosts within 30 minutes, a sign of remote service-based lateral movement or mass payload deployment."
+    severity = "High"
+    mitre_attack_tactic = "Lateral Movement, Execution"
+    mitre_attack_technique = "Remote Services: SMB/Windows Admin Shares; System Services: Service Execution"
+    mitre_attack_id = "T1021.002, T1569.002"
+    mitre_attack_version = "v20"
+    data_source = "Windows System event 7045 (Service Control Manager)"
+    false_positives = "Software deployment (SCCM/Intune, RMM agents) rolling out a new service. Maintain a reference list of approved service names and exclude it."
+
+  events:
+    // Mappings confirmed from Google's own community rule win_susp_or_malicious_service_created.
+    $install.metadata.event_type = "SERVICE_CREATION"
+    $install.metadata.product_name = "Service Control Manager"
+    $install.metadata.product_event_type = "7045"
+    $install.target.application = $service_name
+
+    // Uncomment once a reference list of approved deployments exists:
+    // not $service_name in %approved_service_deployments
+
+  match:
+    // Group by service name only, so the window spans the whole fleet.
+    $service_name over 30m
+
+  outcome:
+    $host_count = count_distinct($install.principal.hostname)
+    $hosts = array_distinct($install.principal.hostname)
+    $first_seen = min($install.metadata.event_timestamp.seconds)
+    $last_seen = max($install.metadata.event_timestamp.seconds)
+    $installing_users = array_distinct($install.principal.user.userid)
+    $risk_score = max(70)
+
+  condition:
+    $install and $host_count >= 3
+}
