@@ -47,6 +47,9 @@ SHIPPER_FIELDS = {
 def clean_event(event: dict) -> dict:
     """Apply the shared normalization rules to one event."""
     out = {k: v for k, v in event.items() if k not in SHIPPER_FIELDS and v not in (None, "")}
+    # nxlog calls the event provider "SourceName"; Sigma rules use "Provider_Name".
+    if "SourceName" in out:
+        out["Provider_Name"] = out.pop("SourceName")
     out["EventID"] = int(out["EventID"])
     channel = str(out.get("Channel", ""))
     out["Channel"] = CANONICAL_CHANNELS.get(channel.lower(), channel)

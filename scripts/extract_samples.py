@@ -81,6 +81,10 @@ def build_outputs() -> tuple[dict[str, list[dict]], list[str]]:
     errors: list[str] = []
 
     for sample in manifest["samples"]:
+        # Synthetic and lab samples are written by hand or exported from BigQuery,
+        # not extracted from a public dataset, so there is nothing to rebuild.
+        if sample["origin"] != "public-dataset":
+            continue
         source = sources[sample["source"]]
         if source["id"] not in events_cache:
             path = cache_path(source)
