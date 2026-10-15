@@ -74,3 +74,7 @@ jobs:
         run: |
           uv run python scripts/convert_rules.py --check
           cat converted/CONVERSION_REPORT.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Compiles every Logica hunt, runs it on DuckDB, and fails if a committed .sql is stale.
+      - name: Run Logica hunts
+        run: uv run python scripts/run_hunts.py --check
