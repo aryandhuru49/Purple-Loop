@@ -328,6 +328,15 @@ wheels = [
 ]
 
 [[package]]
+name = "logica"
+version = "1.3.1415926535897"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6e/7d/8b47070a6ba1f6e2fe7edaa53eaaf6b74a04aa2057511c7e9b1e7ac945c7/logica-1.3.1415926535897.tar.gz", hash = "sha256:7791bf8eebc43a806ea564e779e2adf39b0f7d9232618885232c23c0a0aba1a3", size = 135896, upload-time = "2025-09-26T01:25:08.117Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f9/c3/1ef043527af0d2afd63754c3b302391c0f1e56f8818962e96aa68df5b056/logica-1.3.1415926535897-py3-none-any.whl", hash = "sha256:f6a72795d6a54647131ed0eabe5d915dcedbeda517f44adb2cdfeaf473b1fe7f", size = 183537, upload-time = "2025-09-26T01:25:06.691Z" },
+]
+
+[[package]]
 name = "markupsafe"
 version = "3.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -519,6 +528,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "duckdb" },
+    { name = "logica" },
     { name = "pysigma" },
     { name = "pysigma-backend-secops" },
     { name = "pysigma-backend-splunk" },
@@ -544,6 +554,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "duckdb", specifier = ">=1.5.6" },
+    { name = "logica", specifier = ">=1.3" },
     { name = "pysigma", specifier = ">=1.3,<2" },
     { name = "pysigma-backend-secops", specifier = ">=1.0,<2" },
     { name = "pysigma-backend-splunk", specifier = ">=2.1,<3" },
