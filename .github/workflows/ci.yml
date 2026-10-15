@@ -4,7 +4,7 @@
 #
 # Stages (more are added as the pipeline grows):
 #   1. lint  - the same pre-commit hooks developers run locally
-#   2. test  - pytest: toolchain smoke tests, later every Sigma/YARA rule test
+#   2. test  - Sigma detection table, then pytest (rule, data and harness tests)
 name: CI
 
 on:
@@ -59,6 +59,11 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --locked
+
+      # Prints the pass/fail table and adds it to the job summary page.
+      # Fails the build if any rule misses a malicious event or fires on a benign one.
+      - name: Sigma detection tests
+        run: uv run python scripts/run_sigma_tests.py
 
       - name: Run tests
         run: uv run pytest -v
