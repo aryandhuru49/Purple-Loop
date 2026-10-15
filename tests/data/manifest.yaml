@@ -233,3 +233,11 @@ samples:
       EventID: 4688
       NewProcessName|contains: '\SplunkUniversalForwarder\'
     expected_count: 70
+
+  # Hand-written legitimate events aimed at each rule's edge cases (filters,
+  # look-alike keys, same binary used legitimately). Each event carries a
+  # _synthetic_note explaining which rule it targets and why it must not fire.
+  - output: benign/synthetic_near_misses.jsonl
+    label: benign
+    origin: synthetic
+    why: 18 near-miss events, roughly two per rule; see each event's _synthetic_note.
