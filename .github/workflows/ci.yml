@@ -4,7 +4,7 @@
 #
 # Stages (more are added as the pipeline grows):
 #   1. lint  - the same pre-commit hooks developers run locally
-#   2. test  - Sigma detection table, then pytest (rule, data and harness tests)
+#   2. test  - Sigma detection table, pytest, and a check that converted/ is current
 name: CI
 
 on:
@@ -67,3 +67,10 @@ jobs:
 
       - name: Run tests
         run: uv run pytest -v
+
+      # converted/ is generated from rules/sigma. Fail if it was hand-edited or is stale,
+      # or if any rule fails to convert to Splunk (the required target).
+      - name: Check rule conversions are current
+        run: |
+          uv run python scripts/convert_rules.py --check
+          cat converted/CONVERSION_REPORT.md >> "$GITHUB_STEP_SUMMARY"
