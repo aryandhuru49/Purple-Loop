@@ -1,0 +1,47 @@
+title: Service Installed With Command Shell Or Script In Image Path
+id: 21b7fe69-f201-443f-83a2-a8678d570727
+status: test
+description: |
+  Detects a new Windows service (System event 7045) whose ImagePath runs a command shell,
+  PowerShell or another LOLBin instead of a service executable. PsExec-style lateral movement
+  from Empire, Impacket smbexec/psexec and Metasploit creates a temporary service over SMB
+  (the svcctl named pipe on ADMIN$/IPC$) with a payload such as
+  "%COMSPEC% /C start /b powershell -enc ...". Real services point at an .exe or a svchost
+  group. Sysinternals PsExec installs PSEXESVC.exe, which this rule intentionally ignores.
+  The event is logged on the target host. T1569.002 is the primary technique; T1021.002 is
+  tagged because remote service creation is how SMB lateral movement executes code.
+references:
+  - https://attack.mitre.org/techniques/T1569/002/
+  - https://attack.mitre.org/techniques/T1021/002/
+author: Aryan Dhuru
+date: 2026-10-14
+tags:
+  - attack.execution
+  - attack.lateral-movement
+  - attack.t1569.002
+  - attack.t1021.002
+logsource:
+  product: windows
+  service: system
+detection:
+  selection:
+    Provider_Name: 'Service Control Manager'
+    EventID: 7045
+    ImagePath|contains:
+      - '%COMSPEC%'
+      - 'cmd /c'
+      - 'cmd.exe /c'
+      - 'powershell'
+      - 'pwsh'
+      - 'mshta'
+      - 'rundll32'
+      - 'regsvr32'
+      - 'wscript'
+      - 'cscript'
+      - '\\\\127.0.0.1\\'
+      - '\Users\Public\'
+      - '\Windows\Temp\'
+  condition: selection
+falsepositives:
+  - Some backup and monitoring products install services that wrap cmd.exe; verify the vendor and filter by ServiceName.
+level: high

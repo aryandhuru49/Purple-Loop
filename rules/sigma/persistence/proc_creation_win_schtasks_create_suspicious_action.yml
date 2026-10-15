@@ -1,0 +1,47 @@
+title: Scheduled Task Created With Suspicious Action Via Schtasks
+id: b2d24ff8-4275-49d6-85d0-18f46418cb73
+status: test
+description: |
+  Detects schtasks.exe creating a task whose action (/TR) launches a script interpreter or
+  LOLBin, decodes Base64, or runs from a user-writable folder. Attackers use scheduled tasks
+  for persistence and for running payloads as SYSTEM. Legitimate tasks are mostly created by
+  installers or Group Policy and point at signed binaries under Program Files or System32.
+  This is the command-line half of a pair; the Security-log half (event 4698) catches tasks
+  created through the API or PowerShell cmdlets, which never start schtasks.exe.
+references:
+  - https://attack.mitre.org/techniques/T1053/005/
+  - https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/schtasks-create
+author: Aryan Dhuru
+date: 2026-10-14
+tags:
+  - attack.persistence
+  - attack.execution
+  - attack.privilege-escalation
+  - attack.t1053.005
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection_img:
+    - Image|endswith: '\schtasks.exe'
+    - OriginalFileName: 'schtasks.exe'
+  selection_create:
+    CommandLine|windash|contains: ' /create '
+  selection_action:
+    CommandLine|contains:
+      - 'powershell'
+      - 'pwsh'
+      - 'mshta'
+      - 'rundll32'
+      - 'regsvr32'
+      - 'wscript'
+      - 'cscript'
+      - 'FromBase64String'
+      - '\AppData\'
+      - '\Users\Public\'
+      - '\Windows\Temp\'
+  condition: all of selection_*
+falsepositives:
+  - Administrators scheduling PowerShell maintenance scripts. Prefer filtering on the exact task
+    name and script path rather than removing "powershell" from the rule.
+level: medium

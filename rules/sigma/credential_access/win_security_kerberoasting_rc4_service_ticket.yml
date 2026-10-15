@@ -1,0 +1,38 @@
+title: Kerberoasting - Service Ticket Requested With RC4 Encryption
+id: 44b6b4f9-93f8-415a-831c-581f88504463
+status: test
+description: |
+  Detects a successful Kerberos service ticket request (event 4769 on a domain controller)
+  that used RC4-HMAC encryption (0x17) for a user service account. In Kerberoasting, an
+  attacker requests tickets for accounts with SPNs and cracks them offline; tools like Rubeus
+  ask for RC4 because it is far faster to crack than AES. Modern domains negotiate AES
+  (0x11/0x12) by default, so RC4 tickets for user accounts stand out.
+  Machine accounts (ending in $) and krbtgt are excluded because their keys are random and
+  not practically crackable, so they are not Kerberoasting targets.
+  Detecting volume (many SPNs from one account in a short window) needs correlation; see the
+  native YARA-L rule rules/yara_l/kerberoasting_burst.yaral.
+references:
+  - https://attack.mitre.org/techniques/T1558/003/
+  - https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4769
+author: Aryan Dhuru
+date: 2026-10-14
+tags:
+  - attack.credential-access
+  - attack.t1558.003
+logsource:
+  product: windows
+  service: security
+detection:
+  selection:
+    EventID: 4769
+    TicketEncryptionType: '0x17'
+    Status: '0x0'
+  filter_main_machine_accounts:
+    ServiceName|endswith: '$'
+  filter_main_krbtgt:
+    ServiceName: 'krbtgt'
+  condition: selection and not 1 of filter_main_*
+falsepositives:
+  - Legacy applications or appliances whose service accounts only support RC4. Inventory them and
+    either enable AES (msDS-SupportedEncryptionTypes) or filter by ServiceName.
+level: medium

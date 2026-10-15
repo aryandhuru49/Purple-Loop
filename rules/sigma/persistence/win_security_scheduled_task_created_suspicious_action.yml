@@ -1,0 +1,42 @@
+title: Scheduled Task Registered With Suspicious Action
+id: 7f66802f-2f7f-4296-b30c-798c03ac5842
+status: test
+description: |
+  Detects Security event 4698 (a scheduled task was created) where the task's XML definition
+  runs a script interpreter or LOLBin, decodes Base64, or launches from a user-writable folder.
+  Unlike the schtasks.exe rule, this sees every creation method (schtasks, the COM API,
+  Register-ScheduledTask, remote creation over RPC) because Windows logs the task itself.
+  Requires "Audit Other Object Access Events" to be enabled.
+references:
+  - https://attack.mitre.org/techniques/T1053/005/
+  - https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4698
+author: Aryan Dhuru
+date: 2026-10-14
+tags:
+  - attack.persistence
+  - attack.execution
+  - attack.privilege-escalation
+  - attack.t1053.005
+logsource:
+  product: windows
+  service: security
+detection:
+  selection:
+    EventID: 4698
+    TaskContent|contains:
+      - 'powershell'
+      - 'pwsh'
+      - 'mshta'
+      - 'rundll32'
+      - 'regsvr32'
+      - 'wscript'
+      - 'cscript'
+      - 'FromBase64String'
+      - '\AppData\'
+      - '\Users\Public\'
+      - '\Windows\Temp\'
+  condition: selection
+falsepositives:
+  - Software and management agents that register PowerShell-based maintenance tasks. Filter by
+    TaskName for known vendors after review.
+level: medium

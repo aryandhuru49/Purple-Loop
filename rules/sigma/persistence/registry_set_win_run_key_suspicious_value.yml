@@ -1,0 +1,52 @@
+title: Run Key Set To Launch Script Interpreter Or LOLBin
+id: db4296de-72f2-4b65-9bc3-f4fa06815ca6
+status: test
+description: |
+  Detects a value being written under a Run or RunOnce key (programs started at logon) when
+  the value launches a script interpreter or LOLBin, decodes Base64, contains a URL, or runs
+  from a user-writable folder. Plenty of legitimate software adds Run keys (OneDrive, Teams,
+  security agents), but they point at their own signed executable, not at powershell.exe.
+  The key paths end in a backslash on purpose, so similar keys such as
+  "...\SecureTimeLimits\RunTime\..." do not match.
+references:
+  - https://attack.mitre.org/techniques/T1547/001/
+  - https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys
+author: Aryan Dhuru
+date: 2026-10-14
+tags:
+  - attack.persistence
+  - attack.privilege-escalation
+  - attack.t1547.001
+logsource:
+  product: windows
+  category: registry_set
+detection:
+  selection_key:
+    TargetObject|contains:
+      - '\Software\Microsoft\Windows\CurrentVersion\Run\'
+      - '\Software\Microsoft\Windows\CurrentVersion\RunOnce\'
+      - '\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run\'
+      - '\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\RunOnce\'
+      - '\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\Run\'
+  selection_value:
+    Details|contains:
+      - 'powershell'
+      - 'pwsh'
+      - 'mshta'
+      - 'rundll32'
+      - 'regsvr32'
+      - 'wscript'
+      - 'cscript'
+      - 'cmd.exe /c'
+      - 'cmd /c'
+      - 'FromBase64String'
+      - 'http://'
+      - 'https://'
+      - '\Users\Public\'
+      - '\AppData\Local\Temp\'
+      - '\Windows\Temp\'
+  condition: all of selection_*
+falsepositives:
+  - Login scripts or helpdesk tools that register a PowerShell or cmd wrapper at logon.
+  - Some installers register a RunOnce cleanup command using cmd /c; review the value before filtering.
+level: high

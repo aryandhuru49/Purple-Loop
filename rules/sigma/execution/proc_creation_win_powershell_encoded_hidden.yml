@@ -1,0 +1,50 @@
+title: Hidden PowerShell Window With Encoded Command
+id: b8bbb341-6e58-4e22-b662-7e497c7be4ba
+status: test
+description: |
+  Detects PowerShell started with both a hidden window and a Base64-encoded command, the
+  combination used by Empire, Cobalt Strike and many droppers ("powershell -noP -sta -w 1
+  -enc <base64>"). Each flag alone has legitimate uses (management tools hide windows,
+  some installers encode commands), so requiring both keeps noise low.
+  The windash modifier also matches the same flags written with "/" or other dash characters.
+  The rule matches the binary by OriginalFileName too, so a renamed powershell.exe is caught.
+references:
+  - https://attack.mitre.org/techniques/T1059/001/
+  - https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_powershell_exe
+author: Aryan Dhuru
+date: 2026-10-14
+tags:
+  - attack.execution
+  - attack.t1059.001
+  - attack.stealth
+  - attack.t1027
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection_img:
+    - Image|endswith:
+        - '\powershell.exe'
+        - '\pwsh.exe'
+    - OriginalFileName:
+        - 'PowerShell.EXE'
+        - 'pwsh.dll'
+  selection_encoded:
+    CommandLine|windash|contains:
+      - ' -e '
+      - ' -en '
+      - ' -enc '
+      - ' -enco'      # -encodedcommand and its abbreviations
+      - ' -ec '
+  selection_hidden:
+    CommandLine|windash|contains:
+      - ' -w 1 '
+      - ' -w h'
+      - ' -win h'
+      - ' -window h'
+      - ' -windowstyle h'
+  condition: all of selection_*
+falsepositives:
+  - Some RMM and software deployment agents launch hidden encoded commands. Review the parent
+    process and filter known management tooling by its parent image path.
+level: high
