@@ -34,7 +34,7 @@ detection, prove it with tests, and feed new attack logs back in as test cases.
 flowchart LR
     subgraph Sources["Attack telemetry"]
         P["Public datasets<br/>OTRF (MIT), Splunk attack_data (Apache-2.0)"]
-        L["GCP lab (Phase 2)<br/>Sysmon + Ops Agent, BigQuery"]
+        L["GCP lab (Terraform)<br/>Sysmon + Ops Agent, BigQuery"]
     end
 
     subgraph Data["tests/data"]
@@ -92,7 +92,7 @@ flowchart TD
 | 3 Logica threat hunts (+ generated SQL) | [`hunts/logica/`](hunts/logica) | Run on DuckDB in CI |
 | 4 YARA rules for credential exposure | [`rules/yara/`](rules/yara) | Tested in CI on generated fake secrets and a benign near-miss corpus; CI also scans this repo with them |
 | ATT&CK coverage | [`coverage/`](coverage) | [Table](coverage/COVERAGE.md) and [Navigator layer](coverage/attack_navigator_layer.json) |
-| GCP detection lab (Terraform) | `infra/terraform/` | Phase 2 |
+| GCP detection lab (Terraform) | [`infra/terraform/`](infra/terraform) | AD domain (DC + member) and a Linux host with Sysmon, audit policy, auditd and Ops Agent, logs routed to BigQuery; IAP only, nightly auto-stop, budget alert. Checked in CI (validate, Trivy, script lint); see the [runbook](docs/lab_runbook.md) |
 
 ### ATT&CK coverage
 
@@ -145,17 +145,22 @@ Stated plainly, because a detection repo that oversells itself is worse than non
 - **YARA rules target credential exposure, not malware or attacker tooling.** They find
   exposed service account keys, private keys, Terraform state with secrets and cloud
   credential files. Positive test samples are fake and generated at test time.
+- **The GCP lab is checked, not deployed, by CI.** CI validates and scans the Terraform and
+  lints the bootstrap scripts, but has no cloud credentials. Lab data enters the repo only
+  through a manual export, and it is benign baseline: the lab runs no attack tooling.
 
 ## Roadmap
 
 - [x] Phase 1: Sigma rules, test harness, conversion, YARA-L, Logica hunts, coverage, CI
 - [x] Phase 1: YARA rules for credential exposure, with a CI self-scan
-- [ ] Phase 2: GCP detection lab with Terraform: VMs, Sysmon, Ops Agent, BigQuery export
+- [x] Phase 2: GCP detection lab with Terraform: VMs, Sysmon, Ops Agent, BigQuery export
+- [ ] Phase 2: commit the first lab baseline export to `tests/data/benign/`
 - [ ] Phase 3: GCP audit-log detections, Logica hunts on BigQuery
 
 ## Documentation
 
 - [docs/design_decisions.md](docs/design_decisions.md): why the repo is built the way it is
+- [docs/lab_runbook.md](docs/lab_runbook.md): build, use, export from and tear down the GCP lab
 - [docs/rule_writing_guide.md](docs/rule_writing_guide.md): how to add a rule and its tests
 - [docs/conversion.md](docs/conversion.md): conversion targets, assumptions, backend bugs found
 - [docs/yara_l.md](docs/yara_l.md): native YARA-L rules and UDM mappings

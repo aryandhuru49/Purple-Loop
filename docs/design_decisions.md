@@ -47,7 +47,7 @@ Public datasets don't publish clean baselines. The benign corpus is (a) normal b
 events from the same lab hosts and (b) hand-written near-misses aimed at each rule's edge
 cases (Defender reading LSASS, a RunMRU key containing "powershell", Windows' own
 `regsvr32 /i:` Active Setup call). Synthetic events are labeled `origin: synthetic` and carry
-a `_synthetic_note`. The Phase 2 lab will add real benign data.
+a `_synthetic_note`. The GCP lab adds real benign baseline (`origin: self-generated`).
 
 ## Generated files are committed and checked
 
@@ -66,3 +66,41 @@ compiles and silently never matches, which is worse than an honest gap.
 
 Tags are validated against the current ATT&CK release by `sigma check`. In v20, TA0005 is
 named Stealth (formerly Defense Evasion), so rules and folders use `stealth`.
+
+## GCP lab: infrastructure and logging only
+
+The lab (`infra/terraform/`) builds hosts and telemetry, and nothing else: no attack tooling
+is installed or automated. Its job is real benign baseline today, and a place to run
+simulations by hand later. Exports are forced under `benign/`; malicious samples still need
+a rule folder and an ATT&CK technique, added deliberately.
+
+**No public IPs; IAP instead of a bastion.** RDP and SSH are allowed only from Google's IAP
+range, so access is authenticated with Google identity and logged, with no VM to patch.
+Cloud NAT gives outbound access for agent downloads.
+
+**Passwords never touch Terraform state.** An ephemeral `random_password` feeds Secret
+Manager through the write-only `secret_data_wo` argument (Terraform 1.11+). The VMs read the
+secret at boot over the metadata token and REST, so the images need no gcloud. Trade-off:
+Terraform can't detect drift in the value; rotation means bumping `secret_data_wo_version`.
+
+**Raw XML from the Ops Agent.** The `windows_event_log` receiver runs with
+`render_as_xml: true`, so each event keeps its original `<Data Name="CommandLine">` fields.
+The export parser reads those names directly instead of keeping a second label mapping
+like the one the Splunk text format needs.
+
+**Idempotent startup scripts, not a config-management tool.** One PowerShell and one bash
+script run at every boot and check state before acting. DC promotion and domain join each
+reboot, and the next boot continues. Enough for three hosts; Ansible or DSC would be the
+next step at a larger scale.
+
+**Pinned, hash-checked downloads.** Sysmon and the sysmon-modular config are verified by
+SHA-256 before install, the same trust-on-first-use approach as the public datasets.
+
+**Cost guard rails.** A budget only alerts; it never stops spend. The controls that actually
+limit cost are the nightly stop schedule, small machine types, a 30-day partition expiry in
+BigQuery, a 1 GB scan cap on the export query, and `terraform destroy`.
+
+**Accepted scanner findings are written next to the code.** Trivy fails CI on any finding.
+The two accepted ones (all ports between lab hosts, which AD needs; Google-managed rather
+than customer-supplied disk keys) are suppressed inline with the reason, not in a global
+ignore file.
