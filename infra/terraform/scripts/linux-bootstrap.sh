@@ -43,9 +43,8 @@ systemctl enable --now auditd
 # ---------------------------------------------------------------------------
 if ! dpkg -s google-cloud-ops-agent >/dev/null 2>&1; then
   # Google's documented install method, pinned to major version 2.
-  cd /tmp
-  curl -sSfO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
-  bash add-google-cloud-ops-agent-repo.sh --also-install --version='2.*.*'
+  curl -sSfo /tmp/add-google-cloud-ops-agent-repo.sh     https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
+  bash /tmp/add-google-cloud-ops-agent-repo.sh --also-install --version='2.*.*'
 fi
 
 # Receiver IDs become Cloud Logging log names (auditd, journald), which the

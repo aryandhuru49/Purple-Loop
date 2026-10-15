@@ -9,6 +9,9 @@
 #              conversion, Logica hunts, ATT&CK coverage; uploads the outputs
 #   data     - re-downloads the public datasets (hash-verified) and proves the
 #              committed test samples rebuild byte-for-byte
+#   lab-infra - checks the GCP lab Terraform (fmt, validate), scans it for
+#              misconfigurations (Trivy) and lints the VM bootstrap scripts.
+#              Nothing is deployed: CI has no cloud credentials.
 name: CI
 
 on:
@@ -124,3 +127,54 @@ jobs:
 
       - name: Verify committed samples match a fresh extraction
         run: uv run python scripts/extract_samples.py --check
+
+  lab-infra:
+    name: Lab Terraform checks and misconfiguration scan
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: 1.16.6
+          terraform_wrapper: false
+
+      - name: Terraform format
+        run: terraform fmt -check -recursive -diff
+
+      # -backend=false: validation needs the providers (from the committed lock
+      # file) but no state and no GCP credentials.
+      - name: Terraform init and validate
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+      # shellcheck and PowerShell are preinstalled on GitHub's Ubuntu runners.
+      - name: Lint Linux bootstrap (shellcheck)
+        run: shellcheck scripts/linux-bootstrap.sh
+
+      # The template's placeholders sit inside quoted strings, so the raw file
+      # is valid PowerShell and can be parse-checked without rendering it.
+      - name: Parse Windows bootstrap (PowerShell)
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            "$PWD/scripts/windows-bootstrap.ps1.tftpl", [ref]$null, [ref]$errors) | Out-Null
+          $errors | ForEach-Object { Write-Error $_.ToString() }
+          if ($errors.Count) { exit 1 }
+
+      # Pinned to a commit SHA (v0.36.0), not a tag: a tag can be re-pointed at
+      # different code, which is how several GitHub Actions supply-chain attacks
+      # worked. A security scanner runs with repo access, so it gets the stricter pin.
+      # Accepted findings are annotated inline in the .tf files with the reason.
+      - name: Trivy misconfiguration scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: config
+          scan-ref: infra/terraform
+          version: v0.76.0
+          exit-code: "1"
