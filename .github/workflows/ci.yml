@@ -69,8 +69,12 @@ jobs:
       - name: Sigma detection tests
         run: uv run python scripts/run_sigma_tests.py
 
-      - name: Unit, data, rule-quality and YARA-L lint tests
+      - name: Unit, data, rule-quality, YARA and YARA-L lint tests
         run: uv run pytest -v
+
+      # The repo's own credential-exposure YARA rules scan the repo itself.
+      - name: Scan repository for exposed credentials (YARA)
+        run: uv run python scripts/scan_secrets.py
 
       # converted/ is generated from rules/sigma. Fail if it was hand-edited or is stale,
       # or if any rule fails to convert to Splunk (the required target).

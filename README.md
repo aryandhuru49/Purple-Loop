@@ -34,7 +34,7 @@ detection, prove it with tests, and feed new attack logs back in as test cases.
 flowchart LR
     subgraph Sources["Attack telemetry"]
         P["Public datasets<br/>OTRF (MIT), Splunk attack_data (Apache-2.0)"]
-        L["GCP lab (Phase 2)<br/>Atomic Red Team + Sysmon"]
+        L["GCP lab (Phase 2)<br/>Sysmon + Ops Agent, BigQuery"]
     end
 
     subgraph Data["tests/data"]
@@ -90,8 +90,9 @@ flowchart TD
 | Google SecOps UDM search / YARA-L | [`converted/secops/`](converted/secops) | Partial; see [conversion report](converted/CONVERSION_REPORT.md) |
 | 3 native YARA-L 2.0 correlation rules | [`rules/yara_l/`](rules/yara_l) | Linted and reviewed, **not executed** |
 | 3 Logica threat hunts (+ generated SQL) | [`hunts/logica/`](hunts/logica) | Run on DuckDB in CI |
+| 4 YARA rules for credential exposure | [`rules/yara/`](rules/yara) | Tested in CI on generated fake secrets and a benign near-miss corpus; CI also scans this repo with them |
 | ATT&CK coverage | [`coverage/`](coverage) | [Table](coverage/COVERAGE.md) and [Navigator layer](coverage/attack_navigator_layer.json) |
-| GCP attack lab (Terraform) | `infra/terraform/` | Phase 2 |
+| GCP detection lab (Terraform) | `infra/terraform/` | Phase 2 |
 
 ### ATT&CK coverage
 
@@ -116,6 +117,7 @@ uv run pytest                                   # all tests
 uv run python scripts/convert_rules.py          # regenerate converted/
 uv run python scripts/run_hunts.py              # run Logica hunts on DuckDB
 uv run python scripts/generate_coverage.py      # regenerate the ATT&CK layer
+uv run python scripts/scan_secrets.py [PATH]    # YARA scan for exposed credentials
 
 # Optional: rebuild the test samples from the original public datasets
 uv run python scripts/fetch_datasets.py
@@ -140,14 +142,16 @@ Stated plainly, because a detection repo that oversells itself is worse than non
   run each). Benign data is lab background plus clearly labeled synthetic near-misses, not
   months of production noise, so false-positive rates in a real environment will differ.
 - **Process-creation rules are tested on Sysmon event 1**, not Security event 4688.
-- **YARA (file) rules are not included yet.** See the roadmap.
+- **YARA rules target credential exposure, not malware or attacker tooling.** They find
+  exposed service account keys, private keys, Terraform state with secrets and cloud
+  credential files. Positive test samples are fake and generated at test time.
 
 ## Roadmap
 
 - [x] Phase 1: Sigma rules, test harness, conversion, YARA-L, Logica hunts, coverage, CI
-- [ ] Phase 1: YARA rules for attacker tooling (on hold; scope to be decided)
-- [ ] Phase 2: GCP attack lab with Terraform, Sysmon, Atomic Red Team, BigQuery export
-- [ ] Phase 3: Cloud attacks with Stratus Red Team, GCP audit-log rules, Logica on BigQuery
+- [x] Phase 1: YARA rules for credential exposure, with a CI self-scan
+- [ ] Phase 2: GCP detection lab with Terraform: VMs, Sysmon, Ops Agent, BigQuery export
+- [ ] Phase 3: GCP audit-log detections, Logica hunts on BigQuery
 
 ## Documentation
 
