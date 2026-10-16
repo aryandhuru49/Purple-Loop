@@ -4,6 +4,7 @@ locals {
   apis = [
     "compute.googleapis.com",
     "iap.googleapis.com",
+    "iam.googleapis.com", # service account for the VMs
     "logging.googleapis.com",
     "monitoring.googleapis.com",
     "bigquery.googleapis.com",
