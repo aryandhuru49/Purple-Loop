@@ -49,8 +49,14 @@ Safeguards:
    gcloud auth login
    gcloud auth application-default login     # credentials Terraform and the export script use
    gcloud config set project YOUR_PROJECT_ID
+   gcloud auth application-default set-quota-project YOUR_PROJECT_ID
+   # One-time bootstrap: Terraform needs these two APIs to look up the project
+   # before it can enable the rest itself (apis.tf).
+   gcloud services enable cloudresourcemanager.googleapis.com serviceusage.googleapis.com
    ```
 5. **An RDP client** (Windows: built-in `mstsc`).
+6. **Not on the Free Trial.** Free Trial billing accounts can't create Windows Server VMs.
+   Upgrading keeps any unused trial credit.
 
 ## Deploy
 
