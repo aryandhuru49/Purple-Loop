@@ -170,6 +170,26 @@ Don't delete the event. That loop is the reason for the lab.
 Before committing, read through the exported file. It holds only lab hostnames and accounts, but
 checking it is a good habit, and the pre-commit secret scan runs either way.
 
+## Cloud audit logs: simulate and export
+
+The GCP rules are tested on the project's own Cloud Audit Logs, which need no VMs running.
+The sink also routes them to BigQuery (`cloudaudit_googleapis_com_*` tables, and the
+flattened `audit_events` view the hunts read).
+
+```bash
+# 1. Perform each risky admin action once and undo it (about a minute):
+uv run python scripts/simulate_gcp_audit_events.py --project YOUR_PROJECT_ID --yes
+# 2. Export the printed window: one file per rule under malicious/<rule>/, then the
+#    benign baseline with --exclude-malicious (see docs/gcp_detections.md for the filters):
+uv run --group lab python scripts/export_audit_logs.py --help
+# 3. Test, and run the GCP hunts on the real logs:
+uv run python scripts/run_sigma_tests.py
+uv run --group lab python scripts/run_hunts.py --bigquery YOUR_PROJECT_ID
+```
+
+The export replaces your email and IP address with reserved example values before writing,
+but read the files before committing anyway.
+
 ## Daily use
 
 ```bash
@@ -211,6 +231,7 @@ deleting the whole project is cleaner still: `gcloud projects delete YOUR_PROJEC
 | `apply` fails on `google_billing_budget` with 403 | Your account lacks a billing-account role (see Prerequisites), or `budget_currency` doesn't match the billing account. |
 | ws01 never joins the domain | Check dc01 first: `Get-Service NTDS, DNS` on dc01. ws01 retries for about 45 minutes per boot, so reboot it once the DC is healthy. |
 | No `winevt` table in BigQuery | Tables appear only after the first log entry arrives. Check the Ops Agent on the host (`Get-Service google-cloud-ops-agent*`) and the sink's writer permission on the dataset. |
+| `google_bigquery_table.audit_events` fails: no table matches `cloudaudit_googleapis_com_*` | The sink creates the audit tables when the first entry arrives, usually a minute after the first apply. Run `terraform apply` again. |
 | IAP tunnel error 4033 | Your account needs `roles/iap.tunnelResourceAccessor` (add it to `iap_members`), or the VM is stopped. |
 | Bootstrap log says "Hash mismatch" | An upstream file changed. Review the new version, then update the pinned hash (see *Change or upgrade*). |
 

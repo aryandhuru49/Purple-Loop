@@ -100,6 +100,26 @@ SHA-256 before install, the same trust-on-first-use approach as the public datas
 limit cost are the nightly stop schedule, small machine types, a 30-day partition expiry in
 BigQuery, a 1 GB scan cap on the export query, and `terraform destroy`.
 
+**Cloud rules are tested on real audit logs, made safely.** The GCP rules' positives come
+from a script that performs each risky admin action once with `gcloud` and undoes it
+immediately, so the audit log holds both the action and its benign reversal. The benign
+corpus is the lab project's whole audit history. That history supplied near-misses no
+dataset would have, such as Google's own service agent granting Editor when the Compute API
+is enabled, and each rule condition exists because of one (see docs/gcp_detections.md).
+
+**Native field names for cloud logs, mapped per target.** Sigma has no standard GCP
+taxonomy, so audit entries keep their LogEntry paths (`protoPayload.methodName`, `[]` for
+arrays). Splunk and SecOps mappings live in `pipelines/`, and SecOps uses only fields from
+Google's parser documentation; unmapped fields make a rule "unsupported", never guessed.
+
+**Redact before commit, not after.** Real audit entries carry the administrator's email and
+home IP. The export replaces them with reserved example values before writing anything, and
+redacts any IP outside internal ranges rather than trying to decide which are public.
+
+**One hunt, two engines.** GCP hunts read an `AuditEvent` predicate that `run_hunts.py`
+binds to DuckDB (tests/data, in CI) or to a Terraform-managed BigQuery view with the same
+columns, so the hunt tested in CI is the hunt that runs on real logs.
+
 **Accepted scanner findings are written next to the code.** Trivy fails CI on any finding.
 The two accepted ones (all ports between lab hosts, which AD needs; Google-managed rather
 than customer-supplied disk keys) are suppressed inline with the reason, not in a global

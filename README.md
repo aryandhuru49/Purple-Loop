@@ -35,6 +35,7 @@ flowchart LR
     subgraph Sources["Attack telemetry"]
         P["Public datasets<br/>OTRF (MIT), Splunk attack_data (Apache-2.0)"]
         L["GCP lab (Terraform)<br/>Sysmon + Ops Agent, BigQuery"]
+        A["GCP Cloud Audit Logs<br/>lab project, self-reverting simulation"]
     end
 
     subgraph Data["tests/data"]
@@ -51,12 +52,13 @@ flowchart LR
     subgraph CI["GitHub Actions"]
         T["SQLite test harness<br/>pass/fail per rule"]
         C["pySigma conversion"]
-        H["Logica hunts on DuckDB"]
+        H["Logica hunts<br/>DuckDB in CI, BigQuery in the lab"]
         V["ATT&CK coverage"]
     end
 
     P --> N
     L -. BigQuery export .-> N
+    A -. Logging API export, redacted .-> N
     N --> M & B
     S --> T
     M & B --> T
@@ -84,12 +86,13 @@ flowchart TD
 
 | Component | Where | Status |
 |---|---|---|
-| 10 Sigma rules covering 11 ATT&CK techniques | [`rules/sigma/`](rules/sigma) | Tested in CI: **43/43 malicious events detected, 0 false positives** on 538 benign events, including an hour of real baseline from the GCP lab |
+| 15 Sigma rules covering 16 ATT&CK techniques: 10 Windows, 5 GCP Cloud Audit Log | [`rules/sigma/`](rules/sigma) | Tested in CI: **49/49 malicious events detected, 0 false positives** on 759 benign events, including real Windows baseline and the lab project's full audit history |
 | Test harness (pySigma SQLite backend) | [`scripts/sigma_harness.py`](scripts/sigma_harness.py) | Self-tested: proves it reports misses and false positives |
-| Splunk SPL + `savedsearches.conf` | [`converted/splunk/`](converted/splunk) | 10/10 rules |
+| Splunk SPL + `savedsearches.conf` | [`converted/splunk/`](converted/splunk) | 15/15 rules |
 | Google SecOps UDM search / YARA-L | [`converted/secops/`](converted/secops) | Partial; see [conversion report](converted/CONVERSION_REPORT.md) |
 | 3 native YARA-L 2.0 correlation rules | [`rules/yara_l/`](rules/yara_l) | Linted and reviewed, **not executed** |
-| 3 Logica threat hunts (+ generated SQL) | [`hunts/logica/`](hunts/logica) | Run on DuckDB in CI |
+| 5 Logica threat hunts (+ generated SQL) | [`hunts/logica/`](hunts/logica) | Run on DuckDB in CI; the 2 GCP hunts also run unchanged on BigQuery against the lab's real audit logs |
+| GCP cloud detections | [`docs/gcp_detections.md`](docs/gcp_detections.md) | Positives from a self-reverting simulation in the lab project; every rule condition prevents a real false positive from the project's history |
 | 4 YARA rules for credential exposure | [`rules/yara/`](rules/yara) | Tested in CI on generated fake secrets and a benign near-miss corpus; CI also scans this repo with them |
 | ATT&CK coverage | [`coverage/`](coverage) | [Table](coverage/COVERAGE.md) and [Navigator layer](coverage/attack_navigator_layer.json) |
 | GCP detection lab (Terraform) | [`infra/terraform/`](infra/terraform) | AD domain (DC + member) and a Linux host with Sysmon, audit policy, auditd and Ops Agent, logs routed to BigQuery; IAP only, nightly auto-stop, budget alert. Checked in CI (validate, Trivy, script lint); see the [runbook](docs/lab_runbook.md) |
@@ -133,17 +136,22 @@ Stated plainly, because a detection repo that oversells itself is worse than non
 - **YARA-L is not executed.** Google SecOps is a paid platform. The native YARA-L rules are
   linted offline and reviewed; the Kerberoasting rule depends on UDM field mappings that are
   marked as assumptions. See [docs/yara_l.md](docs/yara_l.md).
-- **SecOps conversion is partial.** The pySigma SecOps backend cannot map 4 of the 10 rules'
-  fields to UDM, and its YARA-L output had precedence and naming bugs; affected output is
-  flagged `DO NOT DEPLOY`. See [docs/conversion.md](docs/conversion.md).
+- **SecOps conversion is partial.** 6 of the 15 rules need fields that have no documented
+  UDM mapping. The pySigma SecOps backend also has bugs found here: AND/OR precedence in
+  YARA-L output, and a dropped `NOT` on multi-condition filters that inverts two GCP rules.
+  Affected output is flagged `DO NOT DEPLOY`. See [docs/conversion.md](docs/conversion.md).
 - **Splunk SPL is not run against Splunk.** Detection logic is tested in SQLite with Sigma
   semantics; the SPL assumes classic `WinEventLog:` sources.
-- **Small, lab-sourced data.** Malicious samples come from public lab datasets (one attack
-  run each). Benign data is public-dataset background, one idle hour from this repo's GCP lab
-  domain, and clearly labeled synthetic near-misses, not months of production noise, so
+- **Small, lab-sourced data.** Windows malicious samples come from public lab datasets (one
+  attack run each); GCP ones from one run of the lab simulation. Benign data is public-dataset
+  background, one idle hour from this repo's GCP lab domain, the lab project's audit history,
+  and clearly labeled synthetic near-misses, not months of production noise, so
   false-positive rates in a real environment will differ. The first lab hour alone exposed
   20 false positives in the LSASS rule (Google's own monitoring agents), since filtered.
 - **Process-creation rules are tested on Sysmon event 1**, not Security event 4688.
+- **GCP rules are tested on one lab project.** Its audit history is real but small (one
+  administrator, Terraform and Google's service agents). The Splunk mapping assumes the
+  Splunk Add-on for Google Cloud Platform reading a Pub/Sub sink, and is not run against Splunk.
 - **YARA rules target credential exposure, not malware or attacker tooling.** They find
   exposed service account keys, private keys, Terraform state with secrets and cloud
   credential files. Positive test samples are fake and generated at test time.
@@ -157,12 +165,13 @@ Stated plainly, because a detection repo that oversells itself is worse than non
 - [x] Phase 1: YARA rules for credential exposure, with a CI self-scan
 - [x] Phase 2: GCP detection lab with Terraform: VMs, Sysmon, Ops Agent, BigQuery export
 - [x] Phase 2: first lab baseline export in `tests/data/benign/` (found and fixed 20 false positives)
-- [ ] Phase 3: GCP audit-log detections, Logica hunts on BigQuery
+- [x] Phase 3: GCP audit-log detections, Logica hunts on BigQuery
 
 ## Documentation
 
 - [docs/design_decisions.md](docs/design_decisions.md): why the repo is built the way it is
 - [docs/lab_runbook.md](docs/lab_runbook.md): build, use, export from and tear down the GCP lab
+- [docs/gcp_detections.md](docs/gcp_detections.md): the cloud rules, their real near-misses, and how the data was made
 - [docs/rule_writing_guide.md](docs/rule_writing_guide.md): how to add a rule and its tests
 - [docs/conversion.md](docs/conversion.md): conversion targets, assumptions, backend bugs found
 - [docs/yara_l.md](docs/yara_l.md): native YARA-L rules and UDM mappings
@@ -171,7 +180,8 @@ Stated plainly, because a detection repo that oversells itself is worse than non
 ## Data sources and licenses
 
 Test samples are extracted from [OTRF Security-Datasets](https://github.com/OTRF/Security-Datasets)
-(MIT) and [Splunk attack_data](https://github.com/splunk/attack_data) (Apache-2.0). Every
+(MIT) and [Splunk attack_data](https://github.com/splunk/attack_data) (Apache-2.0), or exported
+from this repo's own GCP lab with personal emails and IPs redacted (`origin: self-generated`). Every
 sample file's origin, license and extraction filter is recorded in
 [tests/data/manifest.yaml](tests/data/manifest.yaml); the raw files are pinned by SHA-256 in
 [tests/data/sources.yaml](tests/data/sources.yaml). No malware is stored in this repository.
