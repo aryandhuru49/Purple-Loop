@@ -1,0 +1,56 @@
+# pySigma processing pipeline: GCP Cloud Audit Log rules -> Splunk.
+#
+# Assumes audit logs reach Splunk through a Pub/Sub log sink and the Splunk Add-on
+# for Google Cloud Platform: sourcetype google:gcp:pubsub:message, with the LogEntry
+# under "data" and JSON arrays extracted with Splunk's {} notation
+# (data.protoPayload.request.sourceRanges{}). This repo's flattened names use []
+# for arrays, so each field is mapped explicitly.
+#
+# Any GCP field without a mapping fails the conversion (first transformation), instead
+# of emitting a Splunk field name that silently never matches.
+name: Purple Loop - GCP Cloud Audit Logs for Splunk
+priority: 10
+transformations:
+  # First: refuse GCP fields that have no mapping below (keep this list in sync).
+  - id: gcp_audit_splunk_unmapped
+    type: detection_item_failure
+    message: "GCP field has no Splunk mapping in pipelines/gcp_audit_splunk.yml"
+    rule_conditions:
+      - type: logsource
+        product: gcp
+        service: gcp.audit
+    field_name_conditions:
+      - type: include_fields
+        fields:
+          - protoPayload.methodName
+          - protoPayload.resourceName
+          - protoPayload.authenticationInfo.principalEmail
+          - protoPayload.serviceData.policyDelta.bindingDeltas[].action
+          - protoPayload.serviceData.policyDelta.bindingDeltas[].role
+          - protoPayload.serviceData.policyDelta.bindingDeltas[].member
+          - protoPayload.request.sourceRanges[]
+          - protoPayload.request.sink.disabled
+    field_name_cond_not: true
+  - id: gcp_audit_splunk_sourcetype
+    type: add_condition
+    conditions:
+      sourcetype: "google:gcp:pubsub:message"
+    rule_conditions:
+      - type: logsource
+        product: gcp
+        service: gcp.audit
+  - id: gcp_audit_splunk_fields
+    type: field_name_mapping
+    mapping:
+      protoPayload.methodName: data.protoPayload.methodName
+      protoPayload.resourceName: data.protoPayload.resourceName
+      protoPayload.authenticationInfo.principalEmail: data.protoPayload.authenticationInfo.principalEmail
+      protoPayload.serviceData.policyDelta.bindingDeltas[].action: data.protoPayload.serviceData.policyDelta.bindingDeltas{}.action
+      protoPayload.serviceData.policyDelta.bindingDeltas[].role: data.protoPayload.serviceData.policyDelta.bindingDeltas{}.role
+      protoPayload.serviceData.policyDelta.bindingDeltas[].member: data.protoPayload.serviceData.policyDelta.bindingDeltas{}.member
+      protoPayload.request.sourceRanges[]: data.protoPayload.request.sourceRanges{}
+      protoPayload.request.sink.disabled: data.protoPayload.request.sink.disabled
+    rule_conditions:
+      - type: logsource
+        product: gcp
+        service: gcp.audit

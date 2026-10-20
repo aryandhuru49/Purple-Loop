@@ -147,6 +147,78 @@
       ]
     },
     {
+      "techniqueID": "T1098.001",
+      "tactic": "persistence",
+      "score": 1,
+      "comment": "Sigma: GCP Service Account Key Created (tested)",
+      "enabled": true,
+      "showSubtechniques": true,
+      "metadata": [
+        {
+          "name": "rules",
+          "value": "1"
+        },
+        {
+          "name": "tested rules",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "techniqueID": "T1098.001",
+      "tactic": "privilege-escalation",
+      "score": 1,
+      "comment": "Sigma: GCP Service Account Key Created (tested)",
+      "enabled": true,
+      "showSubtechniques": true,
+      "metadata": [
+        {
+          "name": "rules",
+          "value": "1"
+        },
+        {
+          "name": "tested rules",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "techniqueID": "T1098.003",
+      "tactic": "persistence",
+      "score": 1,
+      "comment": "Sigma: GCP Owner or Editor Role Granted (tested)",
+      "enabled": true,
+      "showSubtechniques": true,
+      "metadata": [
+        {
+          "name": "rules",
+          "value": "1"
+        },
+        {
+          "name": "tested rules",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "techniqueID": "T1098.003",
+      "tactic": "privilege-escalation",
+      "score": 1,
+      "comment": "Sigma: GCP Owner or Editor Role Granted (tested)",
+      "enabled": true,
+      "showSubtechniques": true,
+      "metadata": [
+        {
+          "name": "rules",
+          "value": "1"
+        },
+        {
+          "name": "tested rules",
+          "value": "1"
+        }
+      ]
+    },
+    {
       "techniqueID": "T1218.005",
       "tactic": "stealth",
       "score": 1,
@@ -273,6 +345,24 @@
       ]
     },
     {
+      "techniqueID": "T1555.006",
+      "tactic": "credential-access",
+      "score": 1,
+      "comment": "Sigma: GCP Lab Secret Read by Unexpected Principal (tested)",
+      "enabled": true,
+      "showSubtechniques": true,
+      "metadata": [
+        {
+          "name": "rules",
+          "value": "1"
+        },
+        {
+          "name": "tested rules",
+          "value": "1"
+        }
+      ]
+    },
+    {
       "techniqueID": "T1558.003",
       "tactic": "credential-access",
       "score": 2,
@@ -301,6 +391,42 @@
         {
           "name": "rules",
           "value": "2"
+        },
+        {
+          "name": "tested rules",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "techniqueID": "T1685.002",
+      "tactic": "defense-impairment",
+      "score": 1,
+      "comment": "Sigma: GCP Log Sink Deleted or Disabled (tested)",
+      "enabled": true,
+      "showSubtechniques": true,
+      "metadata": [
+        {
+          "name": "rules",
+          "value": "1"
+        },
+        {
+          "name": "tested rules",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "techniqueID": "T1686.001",
+      "tactic": "defense-impairment",
+      "score": 1,
+      "comment": "Sigma: GCP Firewall Rule Opened to the Internet (tested)",
+      "enabled": true,
+      "showSubtechniques": true,
+      "metadata": [
+        {
+          "name": "rules",
+          "value": "1"
         },
         {
           "name": "tested rules",

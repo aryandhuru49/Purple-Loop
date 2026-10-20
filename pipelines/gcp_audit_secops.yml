@@ -1,0 +1,35 @@
+# pySigma processing pipeline: GCP Cloud Audit Log rules -> Google SecOps UDM.
+#
+# Every mapping below is taken from Google's documentation of the default
+# GCP_CLOUDAUDIT parser ("Collect Google Cloud Audit Logs", UDM mapping table):
+# https://docs.cloud.google.com/chronicle/docs/ingestion/default-parsers/gcp-cloudaudit
+# Fields the parser documentation doesn't map (e.g. request.sink.disabled) are
+# deliberately absent: the SecOps backend then reports the rule as unsupported
+# instead of guessing a UDM field (see docs/design_decisions.md).
+#
+# Runs before the backend's own secops_udm pipeline (priority 20), whose validator
+# rejects any name that is not a real UDM field.
+name: Purple Loop - GCP Cloud Audit Logs for Google SecOps
+priority: 10
+transformations:
+  - id: gcp_audit_secops_log_type
+    type: add_condition
+    conditions:
+      metadata.log_type: "GCP_CLOUDAUDIT"
+    rule_conditions:
+      - type: logsource
+        product: gcp
+        service: gcp.audit
+  - id: gcp_audit_secops_fields
+    type: field_name_mapping
+    mapping:
+      protoPayload.methodName: metadata.product_event_type
+      protoPayload.resourceName: target.resource.name
+      protoPayload.authenticationInfo.principalEmail: principal.user.email_addresses
+      protoPayload.serviceData.policyDelta.bindingDeltas[].action: principal.user.attribute.roles.description
+      protoPayload.serviceData.policyDelta.bindingDeltas[].role: principal.user.attribute.roles.name
+      protoPayload.serviceData.policyDelta.bindingDeltas[].member: target.user.userid
+    rule_conditions:
+      - type: logsource
+        product: gcp
+        service: gcp.audit
