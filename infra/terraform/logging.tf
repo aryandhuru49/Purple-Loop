@@ -5,10 +5,16 @@
 #   winevt   Windows Security, System, Sysmon and PowerShell event logs (raw XML)
 #   auditd   Linux audit log (process execution)
 #   journald Linux systemd journal
-# With partitioned tables, each log name becomes one table partitioned by day.
+# plus the project's Cloud Audit Logs (who changed what in GCP), for the cloud
+# detections and the BigQuery hunts:
+#   cloudaudit.googleapis.com/activity     admin changes (always on, free)
+#   cloudaudit.googleapis.com/data_access  reads, where enabled (see audit.tf)
+# With partitioned tables, each log name becomes one table partitioned by day
+# (e.g. cloudaudit_googleapis_com_activity).
 
 locals {
-  lab_log_names = ["winevt", "auditd", "journald"]
+  lab_log_names   = ["winevt", "auditd", "journald"]
+  audit_log_names = ["cloudaudit.googleapis.com%2Factivity", "cloudaudit.googleapis.com%2Fdata_access"]
 }
 
 resource "google_bigquery_dataset" "lab_logs" {
@@ -30,7 +36,8 @@ resource "google_logging_project_sink" "lab_to_bigquery" {
   name        = "purple-loop-lab-to-bigquery"
   destination = "bigquery.googleapis.com/projects/${var.project_id}/datasets/${google_bigquery_dataset.lab_logs.dataset_id}"
   filter = join(" OR ", [
-    for name in local.lab_log_names : "logName=\"projects/${var.project_id}/logs/${name}\""
+    for name in concat(local.lab_log_names, local.audit_log_names) :
+    "logName=\"projects/${var.project_id}/logs/${name}\""
   ])
 
   # The sink gets its own service account (writer_identity) that we grant

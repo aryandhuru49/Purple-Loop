@@ -23,7 +23,7 @@ output "domain_admin_login" {
 }
 
 output "bigquery_dataset" {
-  description = "Dataset receiving lab logs (tables: winevt, auditd, journald)."
+  description = "Dataset receiving lab logs (tables: winevt, auditd, journald, cloudaudit_googleapis_com_*)."
   value       = "${var.project_id}.${google_bigquery_dataset.lab_logs.dataset_id}"
 }
 
