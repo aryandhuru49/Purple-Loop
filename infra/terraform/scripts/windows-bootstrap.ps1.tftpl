@@ -163,6 +163,24 @@ logging:
         receivers: [winevt]
 '@
 
+# Right after installation the agent's services are still starting, and
+# Restart-Service fails with "cannot be stopped" (seen on the first real
+# deploy). Wait for it to be running, then retry the restart a few times.
+function Restart-OpsAgent {
+    $service = Get-Service -Name google-cloud-ops-agent
+    try { $service.WaitForStatus('Running', [TimeSpan]::FromMinutes(3)) } catch { }
+    foreach ($attempt in 1..10) {
+        try {
+            Restart-Service -Name google-cloud-ops-agent -Force -ErrorAction Stop
+            return
+        } catch {
+            Write-Output "Ops Agent: restart attempt $attempt failed ($($_.Exception.Message)); retrying in 15s."
+            Start-Sleep -Seconds 15
+        }
+    }
+    throw 'Ops Agent: could not restart after 10 attempts.'
+}
+
 function Install-OpsAgent {
     if (-not (Get-Service -Name google-cloud-ops-agent -ErrorAction SilentlyContinue)) {
         # Google's documented install method (docs.cloud.google.com/logging/docs/agent/ops-agent/installation).
@@ -174,7 +192,7 @@ function Install-OpsAgent {
     }
     $cfg = 'C:\Program Files\Google\Cloud Operations\Ops Agent\config\config.yaml'
     if (Set-FileIfChanged $cfg $OpsAgentConfig) {
-        Restart-Service -Name google-cloud-ops-agent -Force
+        Restart-OpsAgent
         Write-Output 'Ops Agent: config updated, restarted.'
     } else {
         Write-Output 'Ops Agent: config current.'
