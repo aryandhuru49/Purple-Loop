@@ -49,5 +49,9 @@ def test_sample_files_are_valid_jsonl(path):
     assert lines, f"{path} is empty"
     for line in lines:
         event = json.loads(line)
-        assert isinstance(event["EventID"], int)
-        assert event["Channel"]
+        if "logName" in event:  # Google Cloud Audit Log entry
+            assert "/logs/cloudaudit.googleapis.com" in event["logName"]
+            assert event["protoPayload.methodName"]
+        else:  # Windows event
+            assert isinstance(event["EventID"], int)
+            assert event["Channel"]

@@ -147,12 +147,15 @@ def cap_repeats(events: list[dict], max_per_pattern: int) -> list[dict]:
     return kept
 
 
-def manifest_entry(output: str, why: str, since: str, until: str, count: int) -> str:
+def manifest_entry(
+    output: str, why: str, since: str, until: str, count: int, technique: str | None = None
+) -> str:
     """YAML text for a new manifest entry, appended so the file's comments survive."""
     entry = {
         "output": output,
         "label": output.split("/")[0],
         "origin": "self-generated",
+        **({"technique": technique} if technique else {}),
         "why": why,
         "exported": {"window": f"{since} / {until}", "events": count},
     }

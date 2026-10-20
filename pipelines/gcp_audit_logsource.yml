@@ -1,0 +1,18 @@
+# pySigma processing pipeline: what a "product: gcp, service: gcp.audit" rule means
+# for the events stored in tests/data (Cloud Audit Log entries flattened by
+# scripts/normalize.py, keeping their native LogEntry field names).
+#
+# Used by the SQLite test harness. Without it, a GCP rule would have no log-type
+# condition, so every Windows event would count as "in scope" for it.
+name: Purple Loop - GCP Cloud Audit Logs log source
+priority: 10
+transformations:
+  - id: gcp_audit_logsource
+    type: add_condition
+    conditions:
+      # Admin activity, data access, system event and policy denied logs.
+      logName: "*/logs/cloudaudit.googleapis.com*"
+    rule_conditions:
+      - type: logsource
+        product: gcp
+        service: gcp.audit

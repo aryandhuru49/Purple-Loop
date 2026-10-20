@@ -31,8 +31,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 RULES_DIR = REPO_ROOT / "rules" / "sigma"
 DATA_DIR = REPO_ROOT / "tests" / "data"
 
-# Pipelines that map generic Sigma log sources onto the Windows/Sysmon events we store.
-PIPELINES = ["sysmon", "windows-logsources"]
+# Pipelines that map generic Sigma log sources onto the events we store: Windows/Sysmon
+# (installed pySigma pipelines) and GCP Cloud Audit Logs (this repo's pipelines/ folder).
+PIPELINES = [
+    "sysmon",
+    "windows-logsources",
+    str(REPO_ROOT / "pipelines" / "gcp_audit_logsource.yml"),
+]
 
 # Columns the harness adds to every row; underscore-prefixed so they can't clash with log fields.
 META_COLUMNS = ["_row", "_file", "_label"]

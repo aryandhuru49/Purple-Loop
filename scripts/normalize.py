@@ -8,10 +8,13 @@ Different log shippers produce the same Windows event in different shapes:
     text, where event fields are human-readable labels ("Ticket Encryption Type").
   * The Purple Loop GCP lab: the Ops Agent stores each event's original XML,
     exported from BigQuery by scripts/export_lab_logs.py.
+  * Google Cloud Audit Logs: nested LogEntry JSON, flattened to dotted native
+    paths by flatten_log_entry (exported by scripts/export_audit_logs.py).
 
 Detection rules should not care about any of that. Every event that leaves this
 module uses the native Windows/Sysmon field names that Sigma rules are written
 against (EventID, Channel, Image, CommandLine, TicketEncryptionType, ...).
+Cloud audit events keep their native LogEntry paths (protoPayload.methodName, ...).
 """
 
 import json
@@ -201,6 +204,48 @@ def parse_windows_event_xml(raw_xml: str) -> dict:
                 event.setdefault(field.tag.split("}")[-1], field.text)
 
     return clean_event(event)
+
+
+# ---------------------------------------------------------------------------
+# Google Cloud Audit Logs (Cloud Logging LogEntry JSON)
+# ---------------------------------------------------------------------------
+
+
+def flatten_log_entry(entry: dict) -> dict:
+    """Flatten a Cloud Logging LogEntry into one level of dotted field names.
+
+    Field names stay the native LogEntry paths, as the Windows events keep their
+    native names:
+        {"protoPayload": {"methodName": "SetIamPolicy"}}
+            -> {"protoPayload.methodName": "SetIamPolicy"}
+
+    Arrays use the "name[]" notation from Google's SecOps parser documentation and
+    hold every value found inside them, so a rule can ask "does any binding delta
+    grant roles/owner?":
+        {"bindingDeltas": [{"action": "ADD", "role": "roles/owner"}]}
+            -> {"...bindingDeltas[].action": ["ADD"], "...bindingDeltas[].role": ["roles/owner"]}
+
+    Trade-off: values from different array items are no longer paired, so a single
+    change that removes Owner and adds Viewer has both "REMOVE"/"ADD" and "roles/owner".
+    Splunk's multivalue fields behave the same way; the IAM rule documents it.
+    """
+    flat: dict = {}
+
+    def walk(value, path: str, in_array: bool) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                walk(child, f"{path}.{key}" if path else key, in_array)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item, f"{path}[]", True)
+        elif value is not None and value != "":
+            if in_array:
+                flat.setdefault(path, []).append(value)
+            else:
+                flat[path] = value
+
+    walk(entry, "", False)
+    return flat
 
 
 # ---------------------------------------------------------------------------
