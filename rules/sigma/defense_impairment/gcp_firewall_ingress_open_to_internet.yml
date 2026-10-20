@@ -1,0 +1,36 @@
+title: GCP Firewall Rule Opened to the Internet
+id: df7f5444-38c7-4115-a4d6-e33bb5f56254
+status: test
+description: |
+  Detects a VPC firewall rule being created or changed so that it accepts traffic from
+  any address (0.0.0.0/0 or ::/0). Opening a port to the whole internet exposes
+  services such as RDP, SSH or databases to scanning and brute force, and attackers
+  do it to reach a host they control or to weaken a network boundary. Compute Engine
+  logs two entries per change; only the first (operation.first) carries the request,
+  so that is the one this rule matches.
+references:
+  - https://attack.mitre.org/techniques/T1686/001/
+  - https://cloud.google.com/firewall/docs/firewalls
+author: Aryan Dhuru
+date: 2026-10-20
+tags:
+  - attack.defense-impairment
+  - attack.t1686.001
+logsource:
+  product: gcp
+  service: gcp.audit
+detection:
+  selection_method:
+    protoPayload.methodName|endswith:
+      - '.compute.firewalls.insert'
+      - '.compute.firewalls.patch'
+      - '.compute.firewalls.update'
+  selection_any_source:
+    protoPayload.request.sourceRanges[]|contains:
+      - '0.0.0.0/0'
+      - '::/0'
+  condition: all of selection_*
+falsepositives:
+  - 'Public web front ends that intentionally accept 80/443 from anywhere; filter those exact rule names.'
+  - 'Rules that allow 0.0.0.0/0 but are scoped to an unused target tag still match; review the target.'
+level: high

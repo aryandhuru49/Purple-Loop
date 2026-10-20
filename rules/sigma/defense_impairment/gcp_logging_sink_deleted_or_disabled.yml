@@ -1,0 +1,31 @@
+title: GCP Log Sink Deleted or Disabled
+id: 439db479-c1ff-4e4e-9162-3b0964d160c5
+status: test
+description: |
+  Detects a Cloud Logging sink being deleted, or updated to disabled. Sinks copy logs to
+  a SIEM, a BigQuery dataset or long-term storage; removing or disabling one silently
+  stops that copy, which is how an attacker blinds the security team before acting.
+  Ordinary sink edits (for example Terraform changing the filter) are deliberately not
+  matched, because they are routine and look the same whoever makes them; unusual
+  editors of logging configuration are a better job for a hunt.
+references:
+  - https://attack.mitre.org/techniques/T1685/002/
+  - https://cloud.google.com/logging/docs/export/configure_export_v2
+author: Aryan Dhuru
+date: 2026-10-20
+tags:
+  - attack.defense-impairment
+  - attack.t1685.002
+logsource:
+  product: gcp
+  service: gcp.audit
+detection:
+  selection_delete:
+    protoPayload.methodName: 'google.logging.v2.ConfigServiceV2.DeleteSink'
+  selection_disable:
+    protoPayload.methodName: 'google.logging.v2.ConfigServiceV2.UpdateSink'
+    protoPayload.request.sink.disabled: true
+  condition: 1 of selection_*
+falsepositives:
+  - 'Decommissioning a project or a log pipeline; confirm with the team that owns logging.'
+level: high

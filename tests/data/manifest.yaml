@@ -243,7 +243,7 @@ samples:
   - output: benign/synthetic_near_misses.jsonl
     label: benign
     origin: synthetic
-    why: 18 near-miss events, roughly two per rule; see each event's _synthetic_note.
+    why: 19 near-miss events, roughly two per Windows rule plus one GCP audit entry; see each event's _synthetic_note.
 
   - output: benign/lab_baseline.jsonl
     label: benign
@@ -253,3 +253,60 @@ samples:
     exported:
       window: 2026-10-20T17:27:00+00:00 / 2026-10-20T18:27:00+00:00
       events: 425
+
+  - output: malicious/gcp_iam_service_account_key_created/lab_simulation.jsonl
+    label: malicious
+    origin: self-generated
+    technique: T1098.001
+    why: simulate_gcp_audit_events.py creates a key for a throwaway service account (deleted seconds later).
+    exported:
+      window: 2026-10-20T19:00:40Z / 2026-10-20T19:01:40Z
+      events: 1
+
+  - output: malicious/gcp_iam_privileged_role_granted/lab_simulation.jsonl
+    label: malicious
+    origin: self-generated
+    technique: T1098.003
+    why: simulate_gcp_audit_events.py grants roles/editor on the project to a throwaway service account
+      (revoked seconds later).
+    exported:
+      window: 2026-10-20T19:00:40Z / 2026-10-20T19:01:40Z
+      events: 1
+
+  - output: malicious/gcp_firewall_ingress_open_to_internet/lab_simulation.jsonl
+    label: malicious
+    origin: self-generated
+    technique: T1686.001
+    why: simulate_gcp_audit_events.py creates an ingress rule from 0.0.0.0/0 on a tag no VM has (deleted
+      seconds later). Only the operation's first entry carries the request.
+    exported:
+      window: 2026-10-20T19:00:40Z / 2026-10-20T19:01:40Z
+      events: 1
+
+  - output: malicious/gcp_logging_sink_deleted_or_disabled/lab_simulation.jsonl
+    label: malicious
+    origin: self-generated
+    technique: T1685.002
+    why: simulate_gcp_audit_events.py disables, then deletes, a throwaway log sink.
+    exported:
+      window: 2026-10-20T19:00:40Z / 2026-10-20T19:01:40Z
+      events: 2
+
+  - output: malicious/gcp_secret_accessed_by_unexpected_principal/lab_simulation.jsonl
+    label: malicious
+    origin: self-generated
+    technique: T1555.006
+    why: simulate_gcp_audit_events.py reads the lab domain-admin secret as a person instead of the lab VM
+      service account.
+    exported:
+      window: 2026-10-20T19:00:40Z / 2026-10-20T19:01:40Z
+      events: 1
+
+  - output: benign/gcp_audit_baseline.jsonl
+    label: benign
+    origin: self-generated
+    why: 'All Cloud Audit Log activity in the lab project from the first Terraform apply through the simulation:
+      Terraform, Google service agents, the nightly VM stop schedule, and every simulation undo step.'
+    exported:
+      window: 2026-10-16T18:00:00Z / 2026-10-20T19:05:00Z
+      events: 220

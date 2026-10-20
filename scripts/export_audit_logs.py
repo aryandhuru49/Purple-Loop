@@ -6,7 +6,8 @@ Terraform apply) is available too. Each entry is:
   1. redacted: human account emails and public caller IPs are replaced with
      reserved example values, because these samples are committed to a public repo
   2. flattened to dotted native field names (normalize.flatten_log_entry)
-  3. written as JSONL, with a manifest entry appended if the file has none
+  3. trimmed: text values over MAX_VALUE_CHARS are truncated (table schemas etc.)
+  4. written as JSONL, with a manifest entry appended if the file has none
 
 Positive samples for the GCP rules come from scripts/simulate_gcp_audit_events.py,
 which performs each risky-looking admin action once and immediately undoes it.
@@ -127,6 +128,24 @@ def redact(entry: dict) -> dict:
     return json.loads(text)
 
 
+# Long text values (BigQuery table schemas the log sink writes on every table
+# update, VM startup scripts) are cut to this many characters. The field stays,
+# so rules can still test it exists; no rule reads values this long. This took
+# the first lab baseline from 4.2 MB to well under the repo's 1 MB file limit.
+MAX_VALUE_CHARS = 1000
+
+
+def truncate_long_values(event: dict) -> dict:
+    def cut(value):
+        if isinstance(value, str) and len(value) > MAX_VALUE_CHARS:
+            return f"{value[:MAX_VALUE_CHARS]}...[truncated, {len(value)} chars]"
+        if isinstance(value, list):
+            return [cut(v) for v in value]
+        return value
+
+    return {key: cut(value) for key, value in event.items()}
+
+
 def malicious_insert_ids() -> set[str]:
     """insertIds of every audit entry already committed as a positive sample."""
     ids = set()
@@ -170,7 +189,7 @@ def main() -> int:
         if entry.get("insertId") in skip or entry.get("insertId") in seen:
             continue
         seen.add(entry.get("insertId"))
-        events.append(flatten_log_entry(redact(entry)))
+        events.append(truncate_long_values(flatten_log_entry(redact(entry))))
     if not events:
         sys.exit(f"No audit entries matched: {log_filter}")
 

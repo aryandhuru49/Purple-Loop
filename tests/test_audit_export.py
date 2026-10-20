@@ -9,7 +9,14 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-from export_audit_logs import REDACTED_EMAIL, REDACTED_IP, build_filter, redact  # noqa: E402
+from export_audit_logs import (  # noqa: E402
+    MAX_VALUE_CHARS,
+    REDACTED_EMAIL,
+    REDACTED_IP,
+    build_filter,
+    redact,
+    truncate_long_values,
+)
 from normalize import flatten_log_entry  # noqa: E402
 
 PERSON = "someone.real@gmail.com"
@@ -95,3 +102,11 @@ def test_filter_covers_both_audit_logs_and_the_window():
     assert "cloudaudit.googleapis.com%2Fdata_access" in f
     assert 'timestamp>="2026-10-20T19:00:00Z"' in f and 'timestamp<"2026-10-20T20:00:00Z"' in f
     assert f.endswith('(severity="NOTICE")')
+
+
+def test_long_values_are_truncated_but_kept():
+    long = "x" * (MAX_VALUE_CHARS + 500)
+    out = truncate_long_values({"a": long, "b": [long, "short"], "c": 7})
+    assert out["a"].startswith("x" * MAX_VALUE_CHARS) and out["a"].endswith("chars]")
+    assert len(out["a"]) < len(long)
+    assert out["b"][1] == "short" and out["c"] == 7
