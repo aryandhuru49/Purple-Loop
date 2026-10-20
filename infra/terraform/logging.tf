@@ -49,6 +49,37 @@ resource "google_logging_project_sink" "lab_to_bigquery" {
   }
 }
 
+# One flat view over both audit log tables, with simple column names. The Logica
+# hunts in hunts/logica/gcp_*.l read this view on BigQuery, and scripts/run_hunts.py
+# builds a DuckDB table with the same columns from tests/data, so one hunt file runs
+# on both engines. The wildcard (cloudaudit_googleapis_com_*) picks up the
+# data_access table too; its suffix becomes log_type.
+#
+# The sink creates the tables when the first matching entry arrives (usually within
+# a minute of the first apply). If the view fails with "no matching table", run
+# terraform apply again.
+resource "google_bigquery_table" "audit_events" {
+  dataset_id          = google_bigquery_dataset.lab_logs.dataset_id
+  table_id            = "audit_events"
+  description         = "Flattened Cloud Audit Log entries for the Logica hunts."
+  deletion_protection = false
+
+  view {
+    use_legacy_sql = false
+    query          = <<-SQL
+      SELECT
+        timestamp                                                     AS event_time,
+        _TABLE_SUFFIX                                                 AS log_type,
+        protopayload_auditlog.serviceName                             AS service_name,
+        protopayload_auditlog.methodName                              AS method_name,
+        protopayload_auditlog.authenticationInfo.principalEmail       AS principal_email,
+        protopayload_auditlog.resourceName                            AS resource_name,
+        protopayload_auditlog.requestMetadata.callerIp                AS caller_ip
+      FROM `${var.project_id}.${google_bigquery_dataset.lab_logs.dataset_id}.cloudaudit_googleapis_com_*`
+    SQL
+  }
+}
+
 resource "google_bigquery_dataset_iam_member" "sink_writer" {
   dataset_id = google_bigquery_dataset.lab_logs.dataset_id
   role       = "roles/bigquery.dataEditor"

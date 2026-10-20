@@ -44,3 +44,25 @@ def test_lsass_inventory_shows_mimikatz_style_access(db):
     assert any(
         r["process"].lower().endswith(r"\powershell.exe") and r["access"] == "0x1010" for r in rows
     )
+
+
+def test_logging_hunt_shows_the_sink_edit_the_rule_skips(db):
+    rows = run(db, "gcp_logging_config_changes")
+    found = {(r["method"].rsplit(".", 1)[-1], r["resource"].rsplit("/", 1)[-1]) for r in rows}
+    # The real sink's filter edit by Terraform: routine, so the rule ignores it,
+    # but it belongs in the analyst's list of logging changes.
+    assert ("UpdateSink", "purple-loop-lab-to-bigquery") in found
+    assert ("DeleteSink", "purple-loop-sim-sink") in found
+
+
+def test_rare_methods_hunt_surfaces_a_one_off_key_creation(db):
+    rows = run(db, "gcp_rare_principal_methods")
+    assert any(r["method"] == "google.iam.admin.v1.CreateServiceAccountKey" for r in rows)
+    # Google-managed service agents are excluded.
+    assert not any("system.gserviceaccount.com" in (r["principal"] or "") for r in rows)
+
+
+def test_gcp_hunts_also_compile_for_bigquery():
+    for path in sorted(HUNTS_DIR.glob("gcp_*.l")):
+        sql = compile_hunt(path, "bigquery")
+        assert "`purple_loop_lab_logs.audit_events`" in sql
