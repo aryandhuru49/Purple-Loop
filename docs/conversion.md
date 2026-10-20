@@ -70,6 +70,7 @@ rule in `rules/yara_l/`.
    two-line Windows rule, so it is the backend, not this repo's pipeline.
    `convert_rules.py` detects a negated detection with more than one condition and marks
    the output `DO NOT DEPLOY` (tested in `tests/test_convert.py`).
+   Upstream issue draft: [docs/upstream/secops_dropped_not_issue.md](upstream/secops_dropped_not_issue.md).
 
 These are good candidates to report upstream at
 https://github.com/AttackIQ/pySigma-backend-secops/issues.
