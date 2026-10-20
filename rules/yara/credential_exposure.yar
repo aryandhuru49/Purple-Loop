@@ -88,8 +88,14 @@ rule terraform_state_with_secrets
         // A secret-looking attribute with a non-empty value of 8+ characters.
         $secret_attr = /"(password|admin_password|master_password|private_key|private_key_pem|client_secret|secret|secret_key|access_key|token)"\s*:\s*"[^"]{8,}"/
 
+        // Not a secret: Secret Manager resources store the secret's resource NAME in an
+        // attribute called "secret" ("projects/p/secrets/name"). Found on the lab's own
+        // state, which holds no secret values (passwords are write-only arguments).
+        $secret_ref = /"secret"\s*:\s*"projects\/[^"\/]+\/secrets\/[^"]+"/
+
     condition:
-        all of ($tf_version, $lineage, $resources) and $secret_attr
+        // Every $secret_ref also matches $secret_attr, so require a match that isn't one.
+        all of ($tf_version, $lineage, $resources) and #secret_attr > #secret_ref
 }
 
 rule cloud_credential_file

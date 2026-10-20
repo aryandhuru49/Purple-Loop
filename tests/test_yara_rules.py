@@ -57,6 +57,15 @@ POSITIVE_SAMPLES = {
             '   "instances": [{"attributes": {"result": "x", "pass'
             + 'word": "FAKEpassword123"}}]}]}\n'
         ),
+        # A Secret Manager reference must not hide a real secret in the same state.
+        "mixed.tfstate": (
+            '{"version": 4, "terraform_version": "1.15.8", "serial": 9,\n'
+            ' "lineage": "00000000-0000-0000-0000-000000000000",\n'
+            ' "resources": [{"type": "google_secret_manager_secret_version",\n'
+            '   "instances": [{"attributes": {"secret": "projects/p/secrets/s"}}]},\n'
+            '  {"type": "random_password", "instances": [{"attributes": {"pass'
+            + 'word": "FAKEpassword123"}}]}]}\n'
+        ),
     },
     "cloud_credential_file": {
         "application_default_credentials.json": (
