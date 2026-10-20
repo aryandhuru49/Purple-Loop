@@ -244,3 +244,12 @@ samples:
     label: benign
     origin: synthetic
     why: 18 near-miss events, roughly two per rule; see each event's _synthetic_note.
+
+  - output: benign/lab_baseline.jsonl
+    label: benign
+    origin: self-generated
+    why: One idle hour of a fresh lab domain (dc01 DC, ws01 member) right after the domain join; event types
+      the Sigma rules read, repeats capped at 5 per pattern.
+    exported:
+      window: 2026-10-20T17:27:00+00:00 / 2026-10-20T18:27:00+00:00
+      events: 425

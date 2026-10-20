@@ -84,7 +84,7 @@ flowchart TD
 
 | Component | Where | Status |
 |---|---|---|
-| 10 Sigma rules covering 11 ATT&CK techniques | [`rules/sigma/`](rules/sigma) | Tested in CI: **43/43 malicious events detected, 0 false positives** on 113 benign events |
+| 10 Sigma rules covering 11 ATT&CK techniques | [`rules/sigma/`](rules/sigma) | Tested in CI: **43/43 malicious events detected, 0 false positives** on 538 benign events, including an hour of real baseline from the GCP lab |
 | Test harness (pySigma SQLite backend) | [`scripts/sigma_harness.py`](scripts/sigma_harness.py) | Self-tested: proves it reports misses and false positives |
 | Splunk SPL + `savedsearches.conf` | [`converted/splunk/`](converted/splunk) | 10/10 rules |
 | Google SecOps UDM search / YARA-L | [`converted/secops/`](converted/secops) | Partial; see [conversion report](converted/CONVERSION_REPORT.md) |
@@ -139,8 +139,10 @@ Stated plainly, because a detection repo that oversells itself is worse than non
 - **Splunk SPL is not run against Splunk.** Detection logic is tested in SQLite with Sigma
   semantics; the SPL assumes classic `WinEventLog:` sources.
 - **Small, lab-sourced data.** Malicious samples come from public lab datasets (one attack
-  run each). Benign data is lab background plus clearly labeled synthetic near-misses, not
-  months of production noise, so false-positive rates in a real environment will differ.
+  run each). Benign data is public-dataset background, one idle hour from this repo's GCP lab
+  domain, and clearly labeled synthetic near-misses, not months of production noise, so
+  false-positive rates in a real environment will differ. The first lab hour alone exposed
+  20 false positives in the LSASS rule (Google's own monitoring agents), since filtered.
 - **Process-creation rules are tested on Sysmon event 1**, not Security event 4688.
 - **YARA rules target credential exposure, not malware or attacker tooling.** They find
   exposed service account keys, private keys, Terraform state with secrets and cloud
@@ -154,7 +156,7 @@ Stated plainly, because a detection repo that oversells itself is worse than non
 - [x] Phase 1: Sigma rules, test harness, conversion, YARA-L, Logica hunts, coverage, CI
 - [x] Phase 1: YARA rules for credential exposure, with a CI self-scan
 - [x] Phase 2: GCP detection lab with Terraform: VMs, Sysmon, Ops Agent, BigQuery export
-- [ ] Phase 2: commit the first lab baseline export to `tests/data/benign/`
+- [x] Phase 2: first lab baseline export in `tests/data/benign/` (found and fixed 20 false positives)
 - [ ] Phase 3: GCP audit-log detections, Logica hunts on BigQuery
 
 ## Documentation
