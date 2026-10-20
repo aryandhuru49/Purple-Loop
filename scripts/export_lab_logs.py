@@ -111,6 +111,42 @@ def normalize_events(
     return events, failed
 
 
+# Fields that describe "the same activity" for each event type. A fresh Windows
+# host repeats some benign activity hundreds of times (the first lab export had
+# 550 near-identical .NET compiler launches in 20 minutes), which bloats the
+# corpus without testing anything new. Events sharing a pattern are capped.
+PATTERN_FIELDS = {
+    1: ("Image", "ParentImage"),  # Sysmon process create
+    10: ("SourceImage", "TargetImage", "GrantedAccess"),  # Sysmon process access
+    13: ("Image", "TargetObject"),  # Sysmon registry value set
+    4688: ("NewProcessName", "ParentProcessName"),  # Security process create
+    4698: ("TaskName",),  # scheduled task created
+    4769: ("ServiceName", "TicketEncryptionType"),  # Kerberos service ticket
+    7045: ("ServiceName", "ImagePath"),  # service installed
+}
+
+
+def pattern_key(event: dict) -> tuple:
+    """(EventID, short host name, identifying fields) for repeat capping."""
+    host = str(event.get("Hostname", "")).split(".")[0].lower()
+    fields = PATTERN_FIELDS.get(event["EventID"], ())
+    return (event["EventID"], host, *(str(event.get(f, "")).lower() for f in fields))
+
+
+def cap_repeats(events: list[dict], max_per_pattern: int) -> list[dict]:
+    """Keep at most max_per_pattern events per pattern (the earliest ones). 0 = no cap."""
+    if max_per_pattern <= 0:
+        return events
+    counts: dict[tuple, int] = {}
+    kept = []
+    for event in events:
+        key = pattern_key(event)
+        counts[key] = counts.get(key, 0) + 1
+        if counts[key] <= max_per_pattern:
+            kept.append(event)
+    return kept
+
+
 def manifest_entry(output: str, why: str, since: str, until: str, count: int) -> str:
     """YAML text for a new manifest entry, appended so the file's comments survive."""
     entry = {
@@ -145,7 +181,13 @@ def main() -> int:
     parser.add_argument("--host", help="only events from this VM, e.g. ws01")
     parser.add_argument("--event-id", type=int, action="append", default=[], dest="event_ids")
     parser.add_argument(
-        "--limit", type=int, default=5000, help="max rows read from BigQuery (before filters)"
+        "--limit", type=int, default=100000, help="max rows read from BigQuery (before filters)"
+    )
+    parser.add_argument(
+        "--max-per-pattern",
+        type=int,
+        default=5,
+        help="max events of the same activity per host (0 = keep all; default %(default)s)",
     )
     parser.add_argument(
         "--output", default=DEFAULT_OUTPUT, help="path under tests/data (default: %(default)s)"
@@ -162,6 +204,9 @@ def main() -> int:
     events, failed = normalize_events(raw, args.event_ids, args.host)
     if not events:
         sys.exit(f"No events matched ({len(raw)} rows read, {failed} unparseable).")
+    matched = len(events)
+    events = cap_repeats(events, args.max_per_pattern)
+    print(f"[filter] {len(raw)} rows read, {matched} matched, {len(events)} kept after repeat cap")
 
     path = DATA_DIR / args.output
     path.parent.mkdir(parents=True, exist_ok=True)

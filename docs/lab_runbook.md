@@ -152,6 +152,8 @@ uv run --group lab python scripts/export_lab_logs.py \
 The script:
 1. Queries the `winevt` table for that window. The query is parameterized and refuses to scan more than 1 GB.
 2. Parses each event's raw XML into the repo's flat schema, filters it by event ID and host, and removes duplicates.
+   It also keeps at most 5 events of the same activity per host (`--max-per-pattern`), because a
+   fresh Windows host repeats some background work hundreds of times.
 3. Writes `tests/data/benign/lab_baseline.jsonl` (change this with `--output`).
 4. Appends a `manifest.yaml` entry (`origin: self-generated`) if the file doesn't have one yet.
 

@@ -12,7 +12,12 @@ import pytest
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-from export_lab_logs import ensure_manifest_entry, manifest_entry, normalize_events  # noqa: E402
+from export_lab_logs import (  # noqa: E402
+    cap_repeats,
+    ensure_manifest_entry,
+    manifest_entry,
+    normalize_events,
+)
 from normalize import parse_windows_event_xml  # noqa: E402
 
 NS = "http://schemas.microsoft.com/win/2004/08/events/event"
@@ -91,6 +96,19 @@ def test_normalize_events_filters_dedupes_and_counts_failures():
 
     events, _ = normalize_events(raw, [], host="WS01")
     assert [e["Hostname"] for e in events] == ["ws01.lab.purpleloop.local"]
+
+
+def test_repeat_cap_keeps_variety_and_drops_floods():
+    def proc(image, host="dc01.lab.purpleloop.local", n=0):
+        return {"EventID": 4688, "Hostname": host, "NewProcessName": image, "n": n}
+
+    flood = [proc("C:\\mscorsvw.exe", n=i) for i in range(50)]
+    events = flood + [proc("C:\\svchost.exe"), proc("C:\\mscorsvw.exe", host="ws01")]
+
+    kept = cap_repeats(events, 5)
+    assert [e["n"] for e in kept[:5]] == [0, 1, 2, 3, 4]  # earliest copies kept
+    assert len(kept) == 7  # 5 of the flood + 2 distinct patterns
+    assert cap_repeats(events, 0) == events  # 0 disables the cap
 
 
 def test_manifest_entry_is_appended_once_and_stays_valid(tmp_path):
